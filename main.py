@@ -2,7 +2,9 @@ import tkinter.filedialog as fdiag
 import tkinter as tk
 import tkinter.ttk as ttk
 import os
-import youtube_dl as ydl
+import ffmpeg
+import cv2
+#import youtube_dl as ydl
 
 class App:
 
@@ -33,10 +35,17 @@ class App:
         if f:
             print(f)
 
+    def extract_frame(self, path_video):
+        video = cv2.VideoCapture(path_video)
+        frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.w_in  = int(video.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
+        self.h_in = int(video.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
-    with ydl.YouTubeDL({}) as y:
-        y.download("https://www.youtube.com/watch?v=668nUCeBHyY")
+    #ydl.YoutubeDL({}).download(["https://www.youtube.com/watch?v=668nUCeBHyY"])
 
-    root.mainloop()
+    #root.mainloop()
+    
+    inp = ffmpeg.input('vid.mp4')
