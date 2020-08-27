@@ -1,10 +1,12 @@
+#pylint: disable=attribute-defined-outside-init, C0114, C0115, C0116, invalid-name, unused-argument
 import tkinter.filedialog as fdiag
 import tkinter as tk
 import tkinter.ttk as ttk
-import cv2
 import random
+import cv2
 from PIL import ImageTk, Image
- 
+
+
 class App:
 
     class OptionList:
@@ -22,18 +24,20 @@ class App:
 
         def __init__(self):
             self._current = None
-        
+
         def set(self, mode):
             self._current = mode
             self._set_options()
 
         def _set_options(self):
-            self._options = [App.OptionList.CENTER, App.OptionList.CUSTOM] 
+            self._options = [App.OptionList.CENTER, App.OptionList.CUSTOM]
             if self._current == self.WIDE:
-                self._options[1:1] = [App.OptionList.LEFT, App.OptionList.RIGHT]
+                self._options[1:1] = [
+                    App.OptionList.LEFT, App.OptionList.RIGHT]
             if self._current == self.TALL:
-                self._options[1:1] = [App.OptionList.TOP, App.OptionList.BOTTOM]
-        
+                self._options[1:1] = [
+                    App.OptionList.TOP, App.OptionList.BOTTOM]
+
         def get_options(self):
             if self._current is None:
                 return None
@@ -44,32 +48,48 @@ class App:
 
     def __init__(self, master):
         self.master = master
-        self.width = 320
-        self.height = 180
-        self.aspect = 16/9
         self._mode = self.Mode()
 
-        self.ASPECTS = [
-            '16:9',
-            '16:10',
-            '4:3'
-        ]
-        
+        self.aspects = {
+            '16:9': 16/9,
+            '16:10': 16/10,
+            '4:3': 4/3
+        }
+
+        self.aspect = self.aspects['16:9']
+        self.width_canvas = 320
+        self.height_canvas = int(self.width_canvas/self.aspect)
+
         self.var_video_edit = tk.StringVar()
-        self.entry_video_edit = ttk.Entry(self.master, textvariable=self.var_video_edit)
-        self.button_choose_video = ttk.Button(self.master, text="Choose video..", command=self.event_choose_video)
+        self.entry_video_edit = ttk.Entry(
+            self.master, textvariable=self.var_video_edit)
+        self.button_choose_video = ttk.Button(
+            self.master, text="Choose video..", command=self.event_choose_video)
 
-        self.button_save_video = ttk.Button(self.master, text="Crop and Save video", command=self.event_save_video)
+        self.button_save_video = ttk.Button(
+            self.master, text="Crop and Save video", command=self.event_save_video)
 
-        self.canvas_video_before = tk.Canvas(self.master, bg='black', width=self.width, height=self.height, relief=tk.SUNKEN)
-        self.canvas_video_after = tk.Canvas(self.master, bg='black', width=self.width, height=self.height, relief=tk.SUNKEN)
-
+        self.canvas_video_before = tk.Canvas(
+            self.master, bg='black',
+            width=self.width_canvas, height=self.height_canvas,
+            relief=tk.SUNKEN)
+        self.canvas_video_after = tk.Canvas(
+            self.master, bg='black',
+            width=self.width_canvas, height=self.height_canvas,
+            relief=tk.SUNKEN)
 
         self.var_option = tk.StringVar()
         self.var_option.trace("w", self.event_option_change)
         self.option_crop = ttk.OptionMenu(self.master, self.var_option)
 
-
+        self.spin_width = ttk.Spinbox(
+            self.master, from_=0, command=self.event_spin_rect)
+        self.spin_height = ttk.Spinbox(
+            self.master, from_=0, command=self.event_spin_rect)
+        self.spin_x = ttk.Spinbox(
+            self.master, from_=0, command=self.event_spin_rect)
+        self.spin_y = ttk.Spinbox(
+            self.master, from_=0, command=self.event_spin_rect)
 
         self.button_choose_video.pack()
         self.entry_video_edit.pack()
@@ -80,56 +100,85 @@ class App:
         self.canvas_video_after.pack()
 
         self.option_crop.pack()
+        self.spin_width.pack()
+        self.spin_height.pack()
+        self.spin_x.pack()
+        self.spin_y.pack()
 
     def event_choose_video(self):
-        f = fdiag.askopenfilename(parent=self.master)
-        if f:
-            self.var_video_edit.set(f)
-            self.extract_frame(f)
+        filename_in = fdiag.askopenfilename(parent=self.master)
+        if filename_in:
+            self.var_video_edit.set(filename_in)
+            self.extract_frame(filename_in)
 
     def event_save_video(self):
-        f = fdiag.asksaveasfilename(parent=self.master)
-        if f:
-            print(f)
+        filename_out = fdiag.asksaveasfilename(parent=self.master)
+        if filename_out:
+            print(filename_out)
 
     def extract_frame(self, path_video):
-        video = cv2.VideoCapture(path_video, 0)
+        video = cv2.VideoCapture(path_video)
         try:
             frames_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-            self.w_in  = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-            self.h_in = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            video.set(cv2.CAP_PROP_POS_FRAMES, random.randrange(int(frames_count/2)))
-            ok, frame = video.read()
-            if ok:
+            self.width_input = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.height_input = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            video.set(cv2.CAP_PROP_POS_FRAMES,
+                      random.randrange(int(frames_count)))
+            status, frame = video.read()
+            if status:
                 def check_ratio(w, h):
-                    if w*9/16/h == 1:
+                    if w/h/self.aspect == 1:
                         return False
                     return w/h
-                self.ratio_in = check_ratio(self.w_in, self.h_in)
-                self.image = Image.fromarray(frame)
-                if not self.ratio_in:
-                    self.image_in = ImageTk.PhotoImage(self.image.resize((self.width, self.height)))
+                self.ratio_input = check_ratio(
+                    self.width_input, self.height_input)
+                self.image_input = Image.fromarray(frame)
+                if not self.ratio_input:
+                    self.width_imagetk = self.width_canvas
+                    self.height_imagetk = self.height_canvas
                     self._mode.set(self.Mode.FIT)
                 else:
-                    if self.ratio_in > 1:
-                        self.image_in = ImageTk.PhotoImage(self.image.resize((self.width, int(self.width/self.ratio_in))))
+                    if self.ratio_input > 1:
+                        self.width_imagetk = self.width_canvas
+                        self.height_imagetk = int(
+                            self.width_canvas/self.ratio_input)
                         self._mode.set(self.Mode.WIDE)
                     else:
-                        self.image_in = ImageTk.PhotoImage(self.image.resize((int(self.height*self.ratio_in), self.height)))
+                        self.height_imagetk = self.height_canvas
+                        self.width_imagetk = int(
+                            self.height_canvas*self.ratio_input)
                         self._mode.set(self.Mode.TALL)
-            self.canvas_video_before.create_image(self.width/2, self.height/2, image=self.image_in)
-            self.rect_croparea = self.canvas_video_before.create_rectangle(0,0,0,0, fill='', outline='red', width=5)
+
+            self.prepare_canvas_before()
             self.set_options()
+            self.prepare_canvas_after()
         finally:
             video.release()
 
-    
+    def prepare_canvas_before(self):
+        self.posx_imagetk = (self.width_canvas - self.width_imagetk)/2
+        self.posy_imagetk = (self.height_canvas - self.height_imagetk)/2
+        self.imagetk_input = ImageTk.PhotoImage(
+            self.image_input.resize((self.width_imagetk, self.height_imagetk)))
+        self.canvas_video_before.create_image(
+            self.width_canvas/2, self.height_canvas/2, image=self.imagetk_input)
+        self.rect_croparea = self.canvas_video_before.create_rectangle(
+            0, 0, 0, 0, fill='', outline='red', width=3)
+
+    def prepare_canvas_after(self):
+        pass
+
     def set_options(self):
-        self.option_crop.children['!menu'].delete(0,'end')
+        self.option_crop.children['!menu'].delete(0, 'end')
         options = self._mode.get_options()
         for op in options:
-            self.option_crop.children['!menu'].add_command(label=op, command=lambda x=op : self.var_option.set(x))
+            self.option_crop.children['!menu'].add_command(
+                label=op, command=lambda x=op: self.var_option.set(x))
         self.var_option.set(options[0])
+        self.spin_x.config({'to': self.width_input})
+        self.spin_y.config({'to': self.height_input})
+        self.spin_width.config({'to': self.width_input})
+        self.spin_height.config({'to': self.height_input})
 
     def event_option_change(self, *args):
         if (option := self.var_option.get()) == App.OptionList.CUSTOM:
@@ -137,43 +186,97 @@ class App:
         else:
             if self._mode.get() == App.Mode.FIT:
                 if option == App.OptionList.CENTER:
-                    self.x_crop = 0
-                    self.y_crop = 0
-                    self.w_crop = self.width
-                    self.h_crop = self.height
+                    self.posx_crop = 0
+                    self.posy_crop = 0
+                    self.width_crop = self.width_imagetk
+                    self.height_crop = self.height_imagetk
             if self._mode.get() == App.Mode.WIDE:
                 if option == App.OptionList.CENTER:
-                    self.h_crop = self.width/self.ratio_in
-                    self.w_crop = self.h_crop*self.aspect
-                    self.x_crop = (self.width - self.w_crop)/2
-                    self.y_crop = (self.height - self.h_crop)/2
+                    self.height_crop = self.height_imagetk
+                    self.width_crop = self.height_crop*self.aspect
+                    self.posx_crop = (self.width_canvas - self.width_crop)/2
+                    self.posy_crop = (self.height_canvas - self.height_crop)/2
                 if option == App.OptionList.LEFT:
-                    self.h_crop = self.width/self.ratio_in
-                    self.w_crop = self.h_crop*self.aspect
-                    self.x_crop = 0
-                    self.y_crop = (self.height - self.h_crop)/2
+                    self.height_crop = self.height_imagetk
+                    self.width_crop = self.height_crop*self.aspect
+                    self.posx_crop = 0
+                    self.posy_crop = (self.height_canvas - self.height_crop)/2
                 if option == App.OptionList.RIGHT:
-                    self.h_crop = self.width/self.ratio_in
-                    self.w_crop = self.h_crop*self.aspect
-                    self.x_crop = self.width - self.w_crop
-                    self.y_crop = (self.height - self.h_crop)/2
+                    self.height_crop = self.height_imagetk
+                    self.width_crop = self.height_crop*self.aspect
+                    self.posx_crop = self.width_canvas - self.width_crop
+                    self.posy_crop = (self.height_canvas - self.height_crop)/2
             if self._mode.get() == App.Mode.TALL:
                 if option == App.OptionList.CENTER:
-                    self.w_crop = self.height*self.ratio_in
-                    self.h_crop = self.w_crop/self.aspect
-                    self.x_crop = (self.width - self.w_crop)/2
-                    self.y_crop = (self.height - self.h_crop)/2
+                    self.width_crop = self.width_imagetk
+                    self.height_crop = self.width_crop/self.aspect
+                    self.posx_crop = (self.width_canvas - self.width_crop)/2
+                    self.posy_crop = (self.height_canvas - self.height_crop)/2
                 if option == App.OptionList.TOP:
-                    self.w_crop = self.height*self.ratio_in
-                    self.h_crop = self.w_crop/self.aspect
-                    self.x_crop = (self.width - self.w_crop)/2
-                    self.y_crop = 0
+                    self.width_crop = self.width_imagetk
+                    self.height_crop = self.width_crop/self.aspect
+                    self.posx_crop = (self.width_canvas - self.width_crop)/2
+                    self.posy_crop = 0
                 if option == App.OptionList.BOTTOM:
-                    self.w_crop = self.height*self.ratio_in
-                    self.h_crop = self.w_crop/self.aspect
-                    self.x_crop = (self.width - self.w_crop)/2
-                    self.y_crop = self.height - self.h_crop
-            self.canvas_video_before.coords(self.rect_croparea, self.x_crop, self.y_crop, self.x_crop + self.w_crop, self.y_crop + self.h_crop)
+                    self.width_crop = self.width_imagetk
+                    self.height_crop = self.width_crop/self.aspect
+                    self.posx_crop = (self.width_canvas - self.width_crop)/2
+                    self.posy_crop = self.height_canvas - self.height_crop
+            self.canvas2spin()
+            self.change_croparea()
+
+    def event_spin_rect(self):
+        posx_spin = int(self.spin_x.get())
+        posy_spin = int(self.spin_y.get())
+        width_spin = int(self.spin_width.get())
+        height_spin = int(self.spin_height.get())
+        if (dx := posx_spin + width_spin/2 - self.width_input) > 0:
+            self.spin_x.set(int(posx_spin - dx))
+        if (dy := posy_spin + height_spin/2 - self.height_input) > 0:
+            self.spin_y.set(int(posy_spin - dy))
+        self.spin_x.config({
+            'from': 0 + width_spin/2 - 1,
+            'to': self.width_input - width_spin/2 + 1
+        })
+        self.spin_y.config({
+            'from': 0 + height_spin/2 - 1,
+            'to': self.height_input - height_spin/2 + 1
+        })
+        self.spin2canvas()
+        self.change_croparea()
+
+    def canvas2spin(self):
+        factor = self.width_input/self.width_imagetk
+
+        self.spin_width.set(int(self.width_crop*factor))
+        self.spin_height.set(int(self.height_crop*factor))
+        self.spin_x.set(
+            int((self.posx_crop - self.posx_imagetk + self.width_crop/2)*factor))
+        self.spin_y.set(
+            int(self.height_input - (self.posy_crop -
+                                     self.posy_imagetk + self.height_crop/2) * factor))
+
+    def spin2canvas(self):
+        factor = self.width_imagetk/self.width_input
+        posx_spin = int(self.spin_x.get())
+        posy_spin = int(self.spin_y.get())
+        width_spin = int(self.spin_width.get())
+        height_spin = int(self.spin_height.get())
+
+        self.width_crop = width_spin * factor
+        self.height_crop = height_spin * factor
+        self.posx_crop = posx_spin * factor - self.width_crop/2 + self.posx_imagetk
+        self.posy_crop = (self.height_input - posy_spin) * \
+            factor - self.height_crop/2 + self.posy_imagetk
+
+    def change_croparea(self):
+        self.canvas_video_before.coords(
+            self.rect_croparea,
+            self.posx_crop,
+            self.posy_crop,
+            self.posx_crop + self.width_crop,
+            self.posy_crop + self.height_crop)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
