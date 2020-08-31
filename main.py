@@ -16,8 +16,9 @@ class OptionList:
     RIGHT = 'Right'
     CUSTOM = 'Custom'
 
+
 class Dimensions:
-    
+
     def __init__(self, pos_x=0, pos_y=0, width=0, height=0):
         self.x = pos_x
         self.y = pos_y
@@ -26,9 +27,16 @@ class Dimensions:
 
     def size(self):
         return (self.width, self.height)
-    
+
     def position(self):
         return (self.x, self.y)
+
+    def bbox(self):
+        return (self.x - self.width,
+                self.y - self.height,
+                self.x + self.width,
+                self.y + self.height)
+
 
 class VideoData:
 
@@ -110,9 +118,51 @@ class VideoData:
                 self._image.resize(self._dim_tk.size()))
         return self._image_tk
 
-    def get_crop(self, option=None):
-        
-        pass
+    def get_crop(self, option=None, size=None):
+        if option is None:
+            return self._dim_crop.bbox()
+        if option == OptionList.CUSTOM:
+            pass
+        else:
+            if self._mode.get() == VideoData.Mode.FIT:
+                if option == OptionList.CENTER:
+                    self._dim_crop.width = self._width
+                    self._dim_crop.height = self._height
+                    self._dim_crop.x = self._width/2
+                    self._dim_crop.y = self._height/2
+            if self._mode.get() == VideoData.Mode.WIDE:
+                if option == OptionList.CENTER:
+                    self._dim_crop.height = self._height
+                    self._dim_crop.width = self._height*self._aspect
+                    self._dim_crop.x = self._width/2
+                    self._dim_crop.y = self._height/2
+                if option == OptionList.LEFT:
+                    self._dim_crop.height = self._height
+                    self._dim_crop.width = self._height*self._aspect
+                    self._dim_crop.x = self._dim_crop.width/2
+                    self._dim_crop.y = self._height/2
+                if option == OptionList.RIGHT:
+                    self._dim_crop.height = self._height
+                    self._dim_crop.width = self._height*self._aspect
+                    self._dim_crop.x = self._width - self._dim_crop.width/2
+                    self._dim_crop.x = self._height/2
+            if self._mode.get() == VideoData.Mode.TALL:
+                if option == OptionList.CENTER:
+                    self._dim_crop.width = self._width
+                    self._dim_crop.height = self._dim_crop.width/self._aspect
+                    self._dim_crop.x = self._width/2
+                    self._dim_crop.x = self._height/2
+                if option == OptionList.TOP:
+                    self._dim_crop.width = self._width
+                    self._dim_crop.height = self._dim_crop.width/self._aspect
+                    self._dim_crop.x = self._width/2
+                    self._dim_crop.x = self._height - self._dim_crop.height/2
+                if option == OptionList.BOTTOM:
+                    self._dim_crop.width = self._width
+                    self._dim_crop.height = self._dim_crop.width/self._aspect
+                    self._dim_crop.x = self._width/2
+                    self._dim_crop.x = self._dim_crop.height/2
+        return self._dim_crop.bbox()
 
     def process(self):
         self._video.release()
@@ -121,6 +171,7 @@ class VideoData:
         if w/h/self._aspect == 1:
             return False
         return w/h
+
 
 class App:
 
@@ -161,7 +212,8 @@ class App:
         self.scroll_filepaths = ttk.Scrollbar(
             self.frame_text, orient=tk.HORIZONTAL)
         self.text_filepaths = tk.Text(
-            self.frame_text, height=1, width=30, xscrollcommand=self.scroll_filepaths.set, wrap=tk.NONE)
+            self.frame_text, height=1, width=30,
+            xscrollcommand=self.scroll_filepaths.set, wrap=tk.NONE)
         self.button_choose_video = ttk.Button(
             self.frame_control, text="Choose video..", command=self.event_choose_videos)
         self.scroll_filepaths.config(command=self.text_filepaths.xview)
@@ -236,7 +288,8 @@ class App:
                 if video.is_ok():
                     video.extract_image(self.aspect)
                     self.option_video.children['!menu'].add_command(
-                        label=video.filename, command=lambda x=len(self.videos): self.prepare_canvas(x))
+                        label=video.filename,
+                        command=lambda x=len(self.videos): self.prepare_canvas(x))
                     self.text_filepaths.insert(
                         tk.END, video.filepath + linesep)
                     self.videos.append(video)
@@ -255,12 +308,11 @@ class App:
     def clear_canvas(self):
         self.frame_preview.config(labelwidget=None)
 
-
     def prepare_canvas(self, idx=None, aspect=None):
         if aspect:
             self.var_aspect.set(aspect)
             self.aspect = self.aspects[aspect]
-            self.dim_canvas.height=int(self.dim_canvas.width/self.aspect)
+            self.dim_canvas.height = int(self.dim_canvas.width/self.aspect)
             self.dim_canvas.y = self.dim_canvas.height/2
             self.canvas_video_before.config(height=self.dim_canvas.height)
             self.canvas_video_after.config(height=self.dim_canvas.height)
@@ -283,13 +335,8 @@ class App:
                 self.rect_croparea = self.canvas_video_before.create_rectangle(
                     0, 0, 0, 0, fill='', outline='red', width=3)
 
-    def update_canvas(self, ):
+    def update_canvas(self):
         pass
-        '''
-        self.canvas_video_after.delete(self.image_canvas_after)
-        self.canvas_video_before.delete(self.rect_croparea)
-        self.canvas_video_before.delete(self.image_canvas_before)
-        '''
 
     '''
     def prepare_canvas_before(self, update=False):
