@@ -10,12 +10,25 @@ from PIL import ImageTk, Image
 
 class OptionList:
     CENTER = 'Center'
-    CUSTOM = 'Custom'
-    LEFT = 'Left'
-    RIGHT = 'Right'
     TOP = 'Top'
     BOTTOM = 'Bottom'
+    LEFT = 'Left'
+    RIGHT = 'Right'
+    CUSTOM = 'Custom'
 
+class Dimensions:
+    
+    def __init__(self, pos_x=0, pos_y=0, width=0, height=0):
+        self.x = pos_x
+        self.y = pos_y
+        self.width = width
+        self.height = height
+
+    def size(self):
+        return (self.width, self.height)
+    
+    def position(self):
+        return (self.x, self.y)
 
 class VideoData:
 
@@ -52,6 +65,8 @@ class VideoData:
         self.filepath = filepath
         self.filename, self._fileext = path.splitext(filepath)
         self.filename = path.basename(self.filename)
+        self._dim_crop = Dimensions()
+        self._dim_tk = Dimensions()
         self._video = cv2.VideoCapture(filepath)
         self._mode = VideoData.Mode()
         self._frames = None
@@ -59,14 +74,15 @@ class VideoData:
     def is_ok(self):
         return self._video.isOpened()
 
-    def extract_image(self, aspect):
+    def extract_image(self, aspect, random_frame=True):
         self._aspect = aspect
         if not self._frames:
             self._frames = int(self._video.get(cv2.CAP_PROP_FRAME_COUNT))
             self._width = int(self._video.get(cv2.CAP_PROP_FRAME_WIDTH))
             self._height = int(self._video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self._video.set(cv2.CAP_PROP_POS_FRAMES,
-                        random.randrange(self._frames))
+        if random_frame:
+            self._video.set(cv2.CAP_PROP_POS_FRAMES,
+                            random.randrange(self._frames))
         status, frame = self._video.read()
         if status:
             self._image = Image.fromarray(frame)
@@ -79,7 +95,23 @@ class VideoData:
                 else:
                     self._mode.set(VideoData.Mode.TALL)
 
-    def get_image(self, resize, crop=None):
+    def get_image(self, size=None, crop=None):
+        if size:
+            if self._mode.get() == self.Mode.FIT:
+                self._dim_tk.width = size.width
+                self._dim_tk.height = size.height
+            if self._mode.get() == self.Mode.WIDE:
+                self._dim_tk.width = size.width
+                self._dim_tk.height = int(size.width/self._ratio)
+            if self._mode.get() == self.Mode.TALL:
+                self._dim_tk.height = size.height
+                self._dim_tk.width = int(size.height*self._ratio)
+            self._image_tk = ImageTk.PhotoImage(
+                self._image.resize(self._dim_tk.size()))
+        return self._image_tk
+
+    def get_crop(self, option=None):
+        
         pass
 
     def process(self):
@@ -90,12 +122,12 @@ class VideoData:
             return False
         return w/h
 
-
 class App:
 
     def __init__(self, master):
         self.master = master
         self.videos = []
+        self.show_idx = 0
 
         self.filetypes = {
             'MP4': '.mp4',
@@ -112,8 +144,7 @@ class App:
         }
 
         self.aspect = 1
-        self.width_canvas = 320
-        self.height_canvas = 0
+        self.dim_canvas = Dimensions(width=320, height=0, pos_x=160, pos_y=0)
         self.image_canvas_after = None
         self.image_canvas_before = None
 
@@ -126,35 +157,32 @@ class App:
             self.master, variable=self.var_video)
         self.frame_preview = ttk.LabelFrame(
             self.master, text='Preview', labelwidget=None)
-        self.var_video.trace('w', self.event_video_change)
 
         self.scroll_filepaths = ttk.Scrollbar(
             self.frame_text, orient=tk.HORIZONTAL)
         self.text_filepaths = tk.Text(
-            self.frame_text, height=1, xscrollcommand=self.scroll_filepaths.set, wrap=tk.NONE)
+            self.frame_text, height=1, width=30, xscrollcommand=self.scroll_filepaths.set, wrap=tk.NONE)
         self.button_choose_video = ttk.Button(
             self.frame_control, text="Choose video..", command=self.event_choose_videos)
         self.scroll_filepaths.config(command=self.text_filepaths.xview)
 
         self.canvas_video_before = tk.Canvas(
             self.frame_preview, bg='black',
-            width=self.width_canvas, height=self.height_canvas,
+            width=self.dim_canvas.width, height=self.dim_canvas.height,
             relief=tk.SUNKEN)
         label_video_before = ttk.Label(self.frame_preview, text='Before')
         self.canvas_video_after = tk.Canvas(
             self.frame_preview, bg='black',
-            width=self.width_canvas, height=self.height_canvas,
+            width=self.dim_canvas.width, height=self.dim_canvas.height,
             relief=tk.SUNKEN)
         label_video_after = ttk.Label(self.frame_preview, text='After')
 
         self.var_aspect = tk.StringVar()
-        self.var_aspect.trace('w', self.event_aspect_change)
         self.option_aspect = ttk.OptionMenu(
             self.frame_control, self.var_aspect)
         for a in self.aspects:
             self.option_aspect.children['!menu'].add_command(
-                label=a, command=lambda x=a: self.var_aspect.set(x))
-        self.var_aspect.set('16:9')
+                label=a, command=lambda x=a: self.prepare_canvas(aspect=x))
 
         self.button_save_video = ttk.Button(
             self.master, text="Crop and Save video", command=self.event_save_videos)
@@ -195,31 +223,26 @@ class App:
 
         self.button_save_video.grid(row=2, column=0, columnspan=2)
 
-    '''
-        if self.text_filepaths.get():
-            self.prepare_canvas_before(True)
-            self.event_option_change()
-            self.prepare_canvas_after(True)
-    '''
+        self.prepare_canvas(aspect='16:9')
 
     def event_choose_videos(self):
-        filenames = fdiag.askopenfilenames(
+        filepaths = fdiag.askopenfilenames(
             parent=self.master,
             filetypes=[(k, v) for (k, v) in self.filetypes.items()],
             defaultextension='.mp4')
-        if filenames:
-            for name in filenames:
-                video = VideoData(name)
+        if filepaths:
+            for fpath in filepaths:
+                video = VideoData(fpath)
                 if video.is_ok():
-                    self.videos.append(video)
+                    video.extract_image(self.aspect)
+                    self.option_video.children['!menu'].add_command(
+                        label=video.filename, command=lambda x=len(self.videos): self.prepare_canvas(x))
                     self.text_filepaths.insert(
                         tk.END, video.filepath + linesep)
-
-                    self.option_video.children['!menu'].add_command(
-                        label=video.filename, command=lambda x=video.filename: self.var_option.set(x))
+                    self.videos.append(video)
             self.text_filepaths.config(height=len(self.videos))
             self.frame_preview.config(labelwidget=self.option_video)
-            self.var_video.set(self.videos[0].filename)
+            self.prepare_canvas(idx=0)
 
     def event_save_videos(self):
         if self.videos:
@@ -230,20 +253,38 @@ class App:
                 self.clear_canvas()
 
     def clear_canvas(self):
+        self.frame_preview.config(labelwidget=None)
+
+
+    def prepare_canvas(self, idx=None, aspect=None):
+        if aspect:
+            self.var_aspect.set(aspect)
+            self.aspect = self.aspects[aspect]
+            self.dim_canvas.height=int(self.dim_canvas.width/self.aspect)
+            self.dim_canvas.y = self.dim_canvas.height/2
+            self.canvas_video_before.config(height=self.dim_canvas.height)
+            self.canvas_video_after.config(height=self.dim_canvas.height)
+        if not idx is None:
+            self.show_idx = idx
+        if self.videos:
+            video = self.videos[self.show_idx]
+            self.var_video.set(video.filename)
+            if self.image_canvas_before:
+                self.canvas_video_before.itemconfig(
+                    self.image_canvas_before,
+                    image=video.get_image(size=self.dim_canvas))
+                self.canvas_video_before.coords(
+                    self.image_canvas_before,
+                    *self.dim_canvas.position())
+            else:
+                self.image_canvas_before = self.canvas_video_before.create_image(
+                    *self.dim_canvas.position(),
+                    image=video.get_image(size=self.dim_canvas))
+                self.rect_croparea = self.canvas_video_before.create_rectangle(
+                    0, 0, 0, 0, fill='', outline='red', width=3)
+
+    def update_canvas(self, ):
         pass
-
-    def event_video_change(self, *args):
-        pass
-
-    def event_aspect_change(self, *args):
-        self.aspect = self.aspects[self.var_aspect.get()]
-        self.height_canvas = int(self.width_canvas/self.aspect)
-        self.canvas_video_before.config(height=self.height_canvas)
-        self.canvas_video_after.config(height=self.height_canvas)
-
-    def prepare_canvas(self):
-        pass
-
         '''
         self.canvas_video_after.delete(self.image_canvas_after)
         self.canvas_video_before.delete(self.rect_croparea)
@@ -252,17 +293,7 @@ class App:
 
     '''
     def prepare_canvas_before(self, update=False):
-        if self._mode.get() == self.Mode.FIT:
-            self.width_imagetk = self.width_canvas
-            self.height_imagetk = self.height_canvas
-        if self._mode.get() == self.Mode.WIDE:
-            self.width_imagetk = self.width_canvas
-            self.height_imagetk = int(
-                self.width_canvas/self.ratio_input)
-        if self._mode.get() == self.Mode.TALL:
-            self.height_imagetk = self.height_canvas
-            self.width_imagetk = int(
-                self.height_canvas*self.ratio_input)
+       
         self.posx_imagetk = (self.width_canvas - self.width_imagetk)/2
         self.posy_imagetk = (self.height_canvas - self.height_imagetk)/2
         self.imagetk_input = ImageTk.PhotoImage(
