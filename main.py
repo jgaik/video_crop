@@ -40,12 +40,17 @@ class Dimensions:
             yield self.y
 
     def __init__(self, pos_x=0, pos_y=0, width=0, height=0):
-        self.position = Position(pos_x, pos_y)
-        self.size = Size(width, height)
-        
+        self.position = Dimensions.Position(pos_x, pos_y)
+        self.size = Dimensions.Size(width, height)
+    
+    def set_size(self, width, height):
+        self.set_dimension(width=w, height=h)
 
     def get_size(self):
         return self.size
+        
+    def set_position(self, x, y):
+        self.set_dimension(x=x, y=y)
 
     def get_position(self):
         return self.position
@@ -55,7 +60,16 @@ class Dimensions:
                 self.position.y - self.size.height/2,
                 self.position.x + self.size.width/2,
                 self.position.y + self.size.height/2)
-
+                
+    def set_dimension(self, width=None, height=None, x=None, y=None):
+        if not width is None:
+            self.size.width = width
+        if not height is None:
+            self.size.height = height
+        if not x is None:
+            self.position.x = x
+        if not y is None:
+            self.position.y = y
 
 class VideoData:
 
@@ -127,7 +141,7 @@ class VideoData:
             if size:
                 self._size_border = size
             image_cropped = self._image.crop(self._dim_crop.get_bbox())
-            if ratio_cropped := self._check_ratio(*self._size_border)):
+            if ratio_cropped := self._check_ratio(*self._size_border):
                 if ratio_output > self.aspect:
                     width_output = self._size_border.width
                     height_output = int(width_output/ratio_output)
@@ -141,16 +155,13 @@ class VideoData:
         else:
             if size:
                 if self._mode.get() == VideoData.Mode.FIT:
-                    self._dim_tk.width = size.width
-                    self._dim_tk.height = size.height
+                    self._dim_tk.set_size(size.width, size.height)
                 if self._mode.get() == VideoData.Mode.WIDE:
-                    self._dim_tk.width = size.width
-                    self._dim_tk.height = int(size.width/self._ratio)
+                    self._dim_tk.set_size(size.width, int(size.width/self._ratio))
                 if self._mode.get() == VideoData.Mode.TALL:
-                    self._dim_tk.height = size.height
-                    self._dim_tk.width = int(size.height*self._ratio)
+                    self._dim_tk.set_size(size.height, int(size.height*self._ratio))
                 self._image_tk = ImageTk.PhotoImage(
-                    self._image.resize(self._dim_tk.size()))
+                    self._image.resize(self._dim_tk.get_size()))
                 self._size_border = size
                 self._aspect = size.width/size.height
             return self._image_tk
@@ -163,25 +174,29 @@ class VideoData:
         else:
             if self._mode.get() == VideoData.Mode.FIT:
                 if option == OptionList.CENTER:
-                    self._dim_crop.width = self._width
-                    self._dim_crop.height = self._height
-                    self._dim_crop.x = self._width/2
-                    self._dim_crop.y = self._height/2
+                    self._dim_crop.set_dimension(
+                        width=self._width,
+                        height=self._height,
+                        x=self._width/2,
+                        y=self._height/2)
             if self._mode.get() == VideoData.Mode.WIDE:
                 if option == OptionList.CENTER:
-                    self._dim_crop.height = self._height
-                    self._dim_crop.width = self._height*self._aspect
-                    self._dim_crop.x = self._width/2
-                    self._dim_crop.y = self._height/2
+                    self._dim_crop.set_dimension(
+                        height = self._height,
+                        width = self._height*self._aspect,
+                        x = self._width/2,
+                        y = self._height/2)
                 if option == OptionList.LEFT:
-                    self._dim_crop.height = self._height
-                    self._dim_crop.width = self._height*self._aspect
-                    self._dim_crop.x = self._dim_crop.width/2
-                    self._dim_crop.y = self._height/2
+                    self._dim_crop.set_size(
+                        height = self._height,
+                        width = self._height*self._aspect)
+                    self._dim_crop.set_position(
+                        x = self._dim_crop.size.width/2,
+                        y = self._height/2)
                 if option == OptionList.RIGHT:
                     self._dim_crop.height = self._height
                     self._dim_crop.width = self._height*self._aspect
-                    self._dim_crop.x = self._width - self._dim_crop.width/2
+                    self._dim_crop.x = self._width - self._dim_crop.size.width/2
                     self._dim_crop.x = self._height/2
             if self._mode.get() == VideoData.Mode.TALL:
                 if option == OptionList.CENTER:
@@ -199,7 +214,7 @@ class VideoData:
                     self._dim_crop.height = self._dim_crop.width/self._aspect
                     self._dim_crop.x = self._width/2
                     self._dim_crop.x = self._dim_crop.height/2
-        return self._dim_crop.bbox()
+        return self._dim_crop.get_bbox()
 
     def process(self):
         self._video.release()
@@ -257,12 +272,12 @@ class App:
 
         self.canvas_video_before = tk.Canvas(
             self.frame_preview, bg='black',
-            width=self.dim_canvas.width, height=self.dim_canvas.height,
+            width=self.dim_canvas.size.width, height=self.dim_canvas.size.height,
             relief=tk.SUNKEN)
         label_video_before = ttk.Label(self.frame_preview, text='Before')
         self.canvas_video_after = tk.Canvas(
             self.frame_preview, bg='black',
-            width=self.dim_canvas.width, height=self.dim_canvas.height,
+            width=self.dim_canvas.size.width, height=self.dim_canvas.size.height,
             relief=tk.SUNKEN)
         label_video_after = ttk.Label(self.frame_preview, text='After')
 
@@ -349,10 +364,10 @@ class App:
         if aspect:
             self.var_aspect.set(aspect)
             self.aspect = self.aspects[aspect]
-            self.dim_canvas.height = int(self.dim_canvas.width/self.aspect)
-            self.dim_canvas.y = self.dim_canvas.height/2
-            self.canvas_video_before.config(height=self.dim_canvas.height)
-            self.canvas_video_after.config(height=self.dim_canvas.height)
+            self.dim_canvas.height = int(self.dim_canvas.size.width/self.aspect)
+            self.dim_canvas.y = self.dim_canvas.size.height/2
+            self.canvas_video_before.config(height=self.dim_canvas.size.height)
+            self.canvas_video_after.config(height=self.dim_canvas.size.height)
         if not idx is None:
             self.show_idx = idx
         if self.videos:
@@ -367,7 +382,7 @@ class App:
                     *self.dim_canvas.get_position())
             else:
                 self.image_canvas_before = self.canvas_video_before.create_image(
-                    *self.dim_canvas.position(),
+                    *self.dim_canvas.get_position(),
                     image=video.get_image(size=self.dim_canvas))
 
     def update_canvas(self):
