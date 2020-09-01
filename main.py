@@ -19,23 +19,42 @@ class OptionList:
 
 class Dimensions:
 
+    class Size:
+
+        def __init__(self, width=0, height=0):
+            self.width = width
+            self.height = height
+
+        def __iter__(self):
+            yield self.width
+            yield self.height
+
+    class Position:
+    
+        def __init__(self, x=0, y=0):
+            self.x = x
+            self.y = y
+
+        def __iter__(self):
+            yield self.x
+            yield self.y
+
     def __init__(self, pos_x=0, pos_y=0, width=0, height=0):
-        self.x = pos_x
-        self.y = pos_y
-        self.width = width
-        self.height = height
+        self.position = Position(pos_x, pos_y)
+        self.size = Size(width, height)
+        
 
-    def size(self):
-        return (self.width, self.height)
+    def get_size(self):
+        return self.size
 
-    def position(self):
-        return (self.x, self.y)
+    def get_position(self):
+        return self.position
 
-    def bbox(self):
-        return (self.x - self.width,
-                self.y - self.height,
-                self.x + self.width,
-                self.y + self.height)
+    def get_bbox(self):
+        return (self.position.x - self.size.width/2,
+                self.position.y - self.size.height/2,
+                self.position.x + self.size.width/2,
+                self.position.y + self.size.height/2)
 
 
 class VideoData:
@@ -103,22 +122,40 @@ class VideoData:
                 else:
                     self._mode.set(VideoData.Mode.TALL)
 
-    def get_image(self, size=None, crop=None):
-        if size:
-            if self._mode.get() == self.Mode.FIT:
-                self._dim_tk.width = size.width
-                self._dim_tk.height = size.height
-            if self._mode.get() == self.Mode.WIDE:
-                self._dim_tk.width = size.width
-                self._dim_tk.height = int(size.width/self._ratio)
-            if self._mode.get() == self.Mode.TALL:
-                self._dim_tk.height = size.height
-                self._dim_tk.width = int(size.height*self._ratio)
-            self._image_tk = ImageTk.PhotoImage(
-                self._image.resize(self._dim_tk.size()))
-        return self._image_tk
+    def get_image(self, size=None, crop=False):
+        if crop:
+            if size:
+                self._size_border = size
+            image_cropped = self._image.crop(self._dim_crop.get_bbox())
+            if ratio_cropped := self._check_ratio(*self._size_border)):
+                if ratio_output > self.aspect:
+                    width_output = self._size_border.width
+                    height_output = int(width_output/ratio_output)
+                else:
+                    height_output = self._size_border.height
+                    width_output = int(height_output*ratio_output)
+            else:
+                width_output, height_output = self._size_border
+            return ImageTk.PhotoImage(
+                image_output.resize((width_output, height_output)))
+        else:
+            if size:
+                if self._mode.get() == VideoData.Mode.FIT:
+                    self._dim_tk.width = size.width
+                    self._dim_tk.height = size.height
+                if self._mode.get() == VideoData.Mode.WIDE:
+                    self._dim_tk.width = size.width
+                    self._dim_tk.height = int(size.width/self._ratio)
+                if self._mode.get() == VideoData.Mode.TALL:
+                    self._dim_tk.height = size.height
+                    self._dim_tk.width = int(size.height*self._ratio)
+                self._image_tk = ImageTk.PhotoImage(
+                    self._image.resize(self._dim_tk.size()))
+                self._size_border = size
+                self._aspect = size.width/size.height
+            return self._image_tk
 
-    def get_crop(self, option=None, size=None):
+    def get_crop(self, option=None):
         if option is None:
             return self._dim_crop.bbox()
         if option == OptionList.CUSTOM:
@@ -324,73 +361,20 @@ class App:
             if self.image_canvas_before:
                 self.canvas_video_before.itemconfig(
                     self.image_canvas_before,
-                    image=video.get_image(size=self.dim_canvas))
+                    image=video.get_image(size=self.dim_canvas.get_size()))
                 self.canvas_video_before.coords(
                     self.image_canvas_before,
-                    *self.dim_canvas.position())
+                    *self.dim_canvas.get_position())
             else:
                 self.image_canvas_before = self.canvas_video_before.create_image(
                     *self.dim_canvas.position(),
                     image=video.get_image(size=self.dim_canvas))
-                self.rect_croparea = self.canvas_video_before.create_rectangle(
-                    0, 0, 0, 0, fill='', outline='red', width=3)
 
     def update_canvas(self):
         pass
 
+
     '''
-    def prepare_canvas_before(self, update=False):
-       
-        self.posx_imagetk = (self.width_canvas - self.width_imagetk)/2
-        self.posy_imagetk = (self.height_canvas - self.height_imagetk)/2
-        self.imagetk_input = ImageTk.PhotoImage(
-            self.image_input.resize((self.width_imagetk, self.height_imagetk)))
-        if update:
-            self.canvas_video_before.coords(
-                self.image_canvas_before, self.width_canvas/2, self.height_canvas/2)
-            self.canvas_video_before.itemconfig(
-                self.image_canvas_before, image=self.imagetk_input)
-            self.event_spin_rect()
-        else:
-            self.image_canvas_before = self.canvas_video_before.create_image(
-                self.width_canvas/2, self.height_canvas/2, image=self.imagetk_input)
-            self.rect_croparea = self.canvas_video_before.create_rectangle(
-                0, 0, 0, 0, fill='', outline='red', width=3)
-
-    def prepare_canvas_after(self, update=False):
-        if update:
-            self.canvas_video_after.coords(
-                self.image_canvas_after, self.width_canvas/2, self.height_canvas/2)
-        else:
-            self.imagetk_output = None
-            self.image_canvas_after = self.canvas_video_after.create_image(
-                self.width_canvas/2, self.height_canvas/2, image=self.imagetk_input)
-
-    def update_canvas_after(self):
-        posx_spin = int(self.spin_x.get())
-        posy_spin = int(self.spin_y.get())
-        width_spin = int(self.spin_width.get())
-        height_spin = int(self.spin_height.get())
-        x0 = posx_spin - width_spin/2
-        y0 = self.height_input - posy_spin - height_spin/2
-        x1 = x0 + width_spin
-        y1 = y0 + height_spin
-        image_output = self.image_input.crop((x0, y0, x1, y1))
-        if ratio_output := self.check_ratio(width_spin, height_spin):
-            if ratio_output > self.aspect:
-                width_output = self.width_canvas
-                height_output = int(self.width_canvas/ratio_output)
-            else:
-                height_output = self.height_canvas
-                width_output = int(self.height_canvas*ratio_output)
-        else:
-            width_output = self.width_canvas
-            height_output = self.height_canvas
-        self.imagetk_output = ImageTk.PhotoImage(
-            image_output.resize((width_output, height_output)))
-        self.canvas_video_after.itemconfig(
-            self.image_canvas_after, image=self.imagetk_output)
-
     def set_options(self):
         self.option_crop.children['!menu'].delete(0, 'end')
         options = self._mode.get_options()
@@ -406,55 +390,7 @@ class App:
 
     def event_option_change(self, *args):
         pass
-    '''
-        if (option := self.var_option.get()) == App.OptionList.CUSTOM:
-            self.frame_custom.grid()
-        else:
-            self.frame_custom.grid_remove()
-            if self._mode.get() == App.Mode.FIT:
-                if option == App.OptionList.CENTER:
-                    width_spin = self.width_input
-                    height_spin = self.height_input
-                    posx_spin = self.width_input/2
-                    posy_spin = self.height_input/2
-            if self._mode.get() == App.Mode.WIDE:
-                if option == App.OptionList.CENTER:
-                    height_spin = self.height_input
-                    width_spin = self.height_input*self.aspect
-                    posx_spin = self.width_input/2
-                    posy_spin = self.height_input/2
-                if option == App.OptionList.LEFT:
-                    height_spin = self.height_input
-                    width_spin = self.height_input*self.aspect
-                    posx_spin = width_spin/2
-                    posy_spin = self.height_input/2
-                if option == App.OptionList.RIGHT:
-                    height_spin = self.height_input
-                    width_spin = self.height_input*self.aspect
-                    posx_spin = self.width_input - width_spin/2
-                    posy_spin = self.height_input/2
-            if self._mode.get() == App.Mode.TALL:
-                if option == App.OptionList.CENTER:
-                    width_spin = self.width_input
-                    height_spin = width_spin/self.aspect
-                    posx_spin = self.width_input/2
-                    posy_spin = self.height_input/2
-                if option == App.OptionList.TOP:
-                    width_spin = self.width_input
-                    height_spin = width_spin/self.aspect
-                    posx_spin = self.width_input/2
-                    posy_spin = self.height_input - height_spin/2
-                if option == App.OptionList.BOTTOM:
-                    width_spin = self.width_input
-                    height_spin = width_spin/self.aspect
-                    posx_spin = self.width_input/2
-                    posy_spin = height_spin/2
-            self.spin_width.set(int(width_spin))
-            self.spin_height.set(int(height_spin))
-            self.spin_x.set(int(posx_spin))
-            self.spin_y.set(int(posy_spin))
-            self.event_spin_rect()
-        '''
+   
 
     def event_spin_rect(self):
         pass
