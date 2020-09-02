@@ -4,6 +4,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import random
 from os import path, linesep
+import json
 import cv2
 from PIL import ImageTk, Image
 
@@ -34,10 +35,19 @@ class Dimensions:
         def __init__(self, width=0, height=0):
             self.width = width
             self.height = height
+            
 
         def __iter__(self):
             yield self.width
             yield self.height
+
+        def __repr__(self):
+            dic = self.__dict__
+            keys = [k for k in dic.keys() if k[0] != "_"]
+            return json.dumps({
+                'class': self.__class__.__name__, 
+                'fields': dict([(k, dic[k]) for k in keys])}, indent=4)
+
 
     class Position:
 
@@ -48,6 +58,13 @@ class Dimensions:
         def __iter__(self):
             yield self.x
             yield self.y
+
+        def __repr__(self):
+            dic = self.__dict__
+            keys = [k for k in dic.keys() if k[0] != "_"]
+            return json.dumps({
+                'class': self.__class__.__name__, 
+                'fields': dict([(k, dic[k]) for k in keys])}, indent=4)
 
     def __init__(self, pos_x=0, pos_y=0, width=0, height=0):
         self.position = Dimensions.Position(pos_x, pos_y)
@@ -66,10 +83,10 @@ class Dimensions:
         return self.position
 
     def get_bbox(self):
-        return (self.position.x - self.size.width/2,
-                self.position.y - self.size.height/2,
-                self.position.x + self.size.width/2,
-                self.position.y + self.size.height/2)
+        return (int(self.position.x - self.size.width/2),
+                int(self.position.y - self.size.height/2),
+                int(self.position.x + self.size.width/2),
+                int(self.position.y + self.size.height/2))
 
     def set_dimension(self, width=None, height=None, x=None, y=None):
         if not width is None:
@@ -81,6 +98,12 @@ class Dimensions:
         if not y is None:
             self.position.y = y
 
+    def __repr__(self):
+        return json.dumps({
+            'class': self.__class__.__name__, 
+            'fields': {
+                self.position.__class__.__name__: json.loads(str(self.position)), 
+                self.size.__class__.__name__: json.loads(str(self.size))}}, indent=4)
 
 class VideoData:
 
@@ -122,6 +145,7 @@ class VideoData:
         self._video = cv2.VideoCapture(filepath)
         self._mode = VideoData.Mode()
         self._frames = None
+        self._resize_factor = 1
 
     def is_ok(self):
         return self._video.isOpened()
@@ -151,7 +175,7 @@ class VideoData:
         if crop:
             if size:
                 self._size_border = size
-            self._image_cropped = self._image.crop(self._dim_crop.get_bbox())
+            image_cropped = self._image.crop(self._dim_crop.get_bbox())
             if ratio_cropped := self._check_ratio(*self._size_border):
                 if ratio_cropped > self._aspect:
                     width_output = self._size_border.width
@@ -161,25 +185,33 @@ class VideoData:
                     width_output = int(height_output*ratio_cropped)
             else:
                 width_output, height_output = tuple(self._size_border)
-            self._image_tk_cropped = ImageTk.PhotoImage(
-                self._image_cropped.resize((width_output, height_output)))
+            self._image_tk_cropped =  ImageTk.PhotoImage(
+                image_cropped.resize((width_output, height_output)))
             return self._image_tk_cropped
         else:
             if size:
                 if self._mode.get() == VideoData.Mode.FIT:
                     self._dim_tk.set_size(size.width, size.height)
+                    self._dim_tk.set_position(0, 0)
                 if self._mode.get() == VideoData.Mode.WIDE:
                     self._dim_tk.set_size(
                         width=size.width,
                         height=int(size.width/self._ratio))
+                    self._dim_tk.set_position(
+                        x=0,
+                        y=(size.height - self._dim_tk.size.height)/2)
                 if self._mode.get() == VideoData.Mode.TALL:
                     self._dim_tk.set_size(
                         height=size.height,
                         width=int(size.height*self._ratio))
+                    self._dim_tk.set_position(
+                        x=(size.width - self._dim_tk.size.width)/2,
+                        y=0)
                 self._image_tk = ImageTk.PhotoImage(
                     self._image.resize(self._dim_tk.get_size()))
                 self._size_border = size
                 self._aspect = size.width/size.height
+                self._resize_factor = self._dim_tk.size.width/self._width
             return self._image_tk
 
     def set_crop(self, crop_dim):
@@ -190,6 +222,7 @@ class VideoData:
             self.set_crop(crop_dim)
         else:
             dim = Dimensions()
+            dim_set = False
             if self._mode.get() == VideoData.Mode.FIT:
                 if option == OptionList.CENTER:
                     dim.set_dimension(
@@ -197,6 +230,7 @@ class VideoData:
                         height=self._height,
                         x=self._width/2,
                         y=self._height/2)
+                    dim_set = True
             if self._mode.get() == VideoData.Mode.WIDE:
                 if option == OptionList.CENTER:
                     dim.set_dimension(
@@ -204,6 +238,7 @@ class VideoData:
                         width=self._height*self._aspect,
                         x=self._width/2,
                         y=self._height/2)
+                    dim_set = True
                 if option == OptionList.LEFT:
                     dim.set_size(
                         height=self._height,
@@ -211,6 +246,7 @@ class VideoData:
                     dim.set_position(
                         x=dim.size.width/2,
                         y=self._height/2)
+                    dim_set = True
                 if option == OptionList.RIGHT:
                     dim.set_size(
                         height=self._height,
@@ -218,6 +254,7 @@ class VideoData:
                     dim.set_position(
                         x=self._width - dim.size.width/2,
                         y=self._height/2)
+                    dim_set = True
             if self._mode.get() == VideoData.Mode.TALL:
                 if option == OptionList.CENTER:
                     dim.set_dimension(
@@ -225,22 +262,32 @@ class VideoData:
                         height=self._width/self._aspect,
                         x=self._width/2,
                         y=self._height/2)
-                if option == OptionList.TOP:
-                    dim.set_size(
-                        width=self._width,
-                        height=self._width/self._aspect)
-                    dim.set_position(
-                        x=self._width/2,
-                        y=self._height - dim.size.height/2)
+                    dim_set = True
                 if option == OptionList.BOTTOM:
                     dim.set_size(
                         width=self._width,
                         height=self._width/self._aspect)
                     dim.set_position(
                         x=self._width/2,
+                        y=self._height - dim.size.height/2)
+                    dim_set = True
+                if option == OptionList.TOP:
+                    dim.set_size(
+                        width=self._width,
+                        height=self._width/self._aspect)
+                    dim.set_position(
+                        x=self._width/2,
                         y=dim.size.height/2)
-            self.set_crop(dim)
+                    dim_set = True
+            if dim_set:
+                self.set_crop(dim)
         return self._dim_crop
+
+    def get_dimensions(self):
+        return self._dim_tk
+    
+    def get_resize_factor(self):
+        return self._resize_factor
 
     def process(self):
         self._video.release()
@@ -317,7 +364,7 @@ class App:
         self.button_save_video = ttk.Button(
             self.master, text="Crop and Save video", command=self.event_save_videos)
 
-        self.var_option = tk.StringVar()
+        self.var_option = tk.StringVar(value=OptionList.CENTER)
         self.option_crop = ttk.OptionMenu(self.frame_control, self.var_option)
         for op in OptionList().get():
             self.option_crop.children['!menu'].add_command(
@@ -376,7 +423,6 @@ class App:
             self.text_filepaths.config(height=len(self.videos))
             self.frame_preview.config(labelwidget=self.option_video)
             self.prepare_canvas()
-            self.update_canvas(OptionList.CUSTOM)
 
     def event_save_videos(self):
         if self.videos:
@@ -427,6 +473,8 @@ class App:
                 pass
             else:
                 rect_dim = video.get_crop(option=option)
+                video_dim = video.get_dimensions()
+                rect_bbox = self._rect2canvas(rect_dim, video_dim, video.get_resize_factor()).get_bbox()
             if self.image_canvas_after:
                 self.canvas_video_after.itemconfig(
                     self.image_canvas_after,
@@ -434,16 +482,30 @@ class App:
                 self.canvas_video_after.coords(
                     self.image_canvas_after,
                     *self.dim_canvas.get_position())
+                self.canvas_video_before.coords(
+                    self.rect_croparea, *rect_bbox)
             else:
                 self.image_canvas_after = self.canvas_video_after.create_image(
                     *self.dim_canvas.get_position(),
                     image=video.get_image(crop=True))
+                self.rect_croparea = self.canvas_video_before.create_rectangle(
+                    *rect_bbox, width=3, outline='red')
 
     def event_spin_rect(self):
         if self.videos:
             self.var_option.set(OptionList.CUSTOM)
             video = self.videos[self.show_idx]
             video.set_crop()
+
+    def _rect2canvas(self, rect_dim, video_dim, factor):
+        pos_rect = rect_dim.get_position()
+        pos_vid = video_dim.get_position()
+        return Dimensions(
+            width=rect_dim.size.width*factor,
+            height=rect_dim.size.height*factor,
+            pos_x=pos_rect.x * factor + pos_vid.x,
+            pos_y=pos_rect.y * factor + pos_vid.y
+        )
     '''
         posx_spin = int(self.spin_x.get())
         posy_spin = int(self.spin_y.get())
