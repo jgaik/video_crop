@@ -16,6 +16,16 @@ class OptionList:
     RIGHT = 'Right'
     CUSTOM = 'Custom'
 
+    @classmethod
+    def get(cls):
+        attr = cls.__dict__
+        out = []
+        for a in attr:
+            if not callable(getattr(cls, a)):
+                if not a.startswith("__"):
+                    out.append(attr[a])
+        return out
+
 
 class Dimensions:
 
@@ -30,7 +40,7 @@ class Dimensions:
             yield self.height
 
     class Position:
-    
+
         def __init__(self, x=0, y=0):
             self.x = x
             self.y = y
@@ -42,13 +52,13 @@ class Dimensions:
     def __init__(self, pos_x=0, pos_y=0, width=0, height=0):
         self.position = Dimensions.Position(pos_x, pos_y)
         self.size = Dimensions.Size(width, height)
-    
+
     def set_size(self, width, height):
-        self.set_dimension(width=w, height=h)
+        self.set_dimension(width=width, height=height)
 
     def get_size(self):
         return self.size
-        
+
     def set_position(self, x, y):
         self.set_dimension(x=x, y=y)
 
@@ -60,7 +70,7 @@ class Dimensions:
                 self.position.y - self.size.height/2,
                 self.position.x + self.size.width/2,
                 self.position.y + self.size.height/2)
-                
+
     def set_dimension(self, width=None, height=None, x=None, y=None):
         if not width is None:
             self.size.width = width
@@ -70,6 +80,7 @@ class Dimensions:
             self.position.x = x
         if not y is None:
             self.position.y = y
+
 
 class VideoData:
 
@@ -140,81 +151,96 @@ class VideoData:
         if crop:
             if size:
                 self._size_border = size
-            image_cropped = self._image.crop(self._dim_crop.get_bbox())
+            self._image_cropped = self._image.crop(self._dim_crop.get_bbox())
             if ratio_cropped := self._check_ratio(*self._size_border):
-                if ratio_output > self.aspect:
+                if ratio_cropped > self._aspect:
                     width_output = self._size_border.width
-                    height_output = int(width_output/ratio_output)
+                    height_output = int(width_output/ratio_cropped)
                 else:
                     height_output = self._size_border.height
-                    width_output = int(height_output*ratio_output)
+                    width_output = int(height_output*ratio_cropped)
             else:
-                width_output, height_output = self._size_border
-            return ImageTk.PhotoImage(
-                image_output.resize((width_output, height_output)))
+                width_output, height_output = tuple(self._size_border)
+            self._image_tk_cropped = ImageTk.PhotoImage(
+                self._image_cropped.resize((width_output, height_output)))
+            return self._image_tk_cropped
         else:
             if size:
                 if self._mode.get() == VideoData.Mode.FIT:
                     self._dim_tk.set_size(size.width, size.height)
                 if self._mode.get() == VideoData.Mode.WIDE:
-                    self._dim_tk.set_size(size.width, int(size.width/self._ratio))
+                    self._dim_tk.set_size(
+                        width=size.width,
+                        height=int(size.width/self._ratio))
                 if self._mode.get() == VideoData.Mode.TALL:
-                    self._dim_tk.set_size(size.height, int(size.height*self._ratio))
+                    self._dim_tk.set_size(
+                        height=size.height,
+                        width=int(size.height*self._ratio))
                 self._image_tk = ImageTk.PhotoImage(
                     self._image.resize(self._dim_tk.get_size()))
                 self._size_border = size
                 self._aspect = size.width/size.height
             return self._image_tk
 
-    def get_crop(self, option=None):
-        if option is None:
-            return self._dim_crop.bbox()
+    def set_crop(self, crop_dim):
+        self._dim_crop = crop_dim
+
+    def get_crop(self, option=None, crop_dim=None):
         if option == OptionList.CUSTOM:
-            pass
+            self.set_crop(crop_dim)
         else:
+            dim = Dimensions()
             if self._mode.get() == VideoData.Mode.FIT:
                 if option == OptionList.CENTER:
-                    self._dim_crop.set_dimension(
+                    dim.set_dimension(
                         width=self._width,
                         height=self._height,
                         x=self._width/2,
                         y=self._height/2)
             if self._mode.get() == VideoData.Mode.WIDE:
                 if option == OptionList.CENTER:
-                    self._dim_crop.set_dimension(
-                        height = self._height,
-                        width = self._height*self._aspect,
-                        x = self._width/2,
-                        y = self._height/2)
+                    dim.set_dimension(
+                        height=self._height,
+                        width=self._height*self._aspect,
+                        x=self._width/2,
+                        y=self._height/2)
                 if option == OptionList.LEFT:
-                    self._dim_crop.set_size(
-                        height = self._height,
-                        width = self._height*self._aspect)
-                    self._dim_crop.set_position(
-                        x = self._dim_crop.size.width/2,
-                        y = self._height/2)
+                    dim.set_size(
+                        height=self._height,
+                        width=self._height*self._aspect)
+                    dim.set_position(
+                        x=dim.size.width/2,
+                        y=self._height/2)
                 if option == OptionList.RIGHT:
-                    self._dim_crop.height = self._height
-                    self._dim_crop.width = self._height*self._aspect
-                    self._dim_crop.x = self._width - self._dim_crop.size.width/2
-                    self._dim_crop.x = self._height/2
+                    dim.set_size(
+                        height=self._height,
+                        width=self._height*self._aspect)
+                    dim.set_position(
+                        x=self._width - dim.size.width/2,
+                        y=self._height/2)
             if self._mode.get() == VideoData.Mode.TALL:
                 if option == OptionList.CENTER:
-                    self._dim_crop.width = self._width
-                    self._dim_crop.height = self._dim_crop.width/self._aspect
-                    self._dim_crop.x = self._width/2
-                    self._dim_crop.x = self._height/2
+                    dim.set_dimension(
+                        width=self._width,
+                        height=self._width/self._aspect,
+                        x=self._width/2,
+                        y=self._height/2)
                 if option == OptionList.TOP:
-                    self._dim_crop.width = self._width
-                    self._dim_crop.height = self._dim_crop.width/self._aspect
-                    self._dim_crop.x = self._width/2
-                    self._dim_crop.x = self._height - self._dim_crop.height/2
+                    dim.set_size(
+                        width=self._width,
+                        height=self._width/self._aspect)
+                    dim.set_position(
+                        x=self._width/2,
+                        y=self._height - dim.size.height/2)
                 if option == OptionList.BOTTOM:
-                    self._dim_crop.width = self._width
-                    self._dim_crop.height = self._dim_crop.width/self._aspect
-                    self._dim_crop.x = self._width/2
-                    self._dim_crop.x = self._dim_crop.height/2
-        return self._dim_crop.get_bbox()
+                    dim.set_size(
+                        width=self._width,
+                        height=self._width/self._aspect)
+                    dim.set_position(
+                        x=self._width/2,
+                        y=dim.size.height/2)
+            self.set_crop(dim)
+        return self._dim_crop
 
     def process(self):
         self._video.release()
@@ -292,8 +318,10 @@ class App:
             self.master, text="Crop and Save video", command=self.event_save_videos)
 
         self.var_option = tk.StringVar()
-        self.var_option.trace("w", self.event_option_change)
         self.option_crop = ttk.OptionMenu(self.frame_control, self.var_option)
+        for op in OptionList().get():
+            self.option_crop.children['!menu'].add_command(
+                label=op, command=lambda x=op: self.update_canvas(option=x))
 
         self.spin_width = ttk.Spinbox(
             self.frame_custom, from_=0, command=self.event_spin_rect, width=4)
@@ -347,7 +375,8 @@ class App:
                     self.videos.append(video)
             self.text_filepaths.config(height=len(self.videos))
             self.frame_preview.config(labelwidget=self.option_video)
-            self.prepare_canvas(idx=0)
+            self.prepare_canvas()
+            self.update_canvas(OptionList.CUSTOM)
 
     def event_save_videos(self):
         if self.videos:
@@ -364,8 +393,9 @@ class App:
         if aspect:
             self.var_aspect.set(aspect)
             self.aspect = self.aspects[aspect]
-            self.dim_canvas.height = int(self.dim_canvas.size.width/self.aspect)
-            self.dim_canvas.y = self.dim_canvas.size.height/2
+            self.dim_canvas.set_dimension(
+                height=int(self.dim_canvas.size.width/self.aspect))
+            self.dim_canvas.set_dimension(y=self.dim_canvas.size.height/2)
             self.canvas_video_before.config(height=self.dim_canvas.size.height)
             self.canvas_video_after.config(height=self.dim_canvas.size.height)
         if not idx is None:
@@ -383,32 +413,37 @@ class App:
             else:
                 self.image_canvas_before = self.canvas_video_before.create_image(
                     *self.dim_canvas.get_position(),
-                    image=video.get_image(size=self.dim_canvas))
+                    image=video.get_image(size=self.dim_canvas.get_size()))
+            self.update_canvas()
 
-    def update_canvas(self):
-        pass
-
-
-    '''
-    def set_options(self):
-        self.option_crop.children['!menu'].delete(0, 'end')
-        options = self._mode.get_options()
-        for op in options:
-            self.option_crop.children['!menu'].add_command(
-                label=op, command=lambda x=op: self.var_option.set(x))
-        self.var_option.set(options[0])
-        self.spin_x.config({'to': self.width_input})
-        self.spin_y.config({'to': self.height_input})
-        self.spin_width.config({'to': self.width_input})
-        self.spin_height.config({'to': self.height_input})
-    '''
-
-    def event_option_change(self, *args):
-        pass
-   
+    def update_canvas(self, option=None):
+        if option:
+            self.var_option.set(option)
+        else:
+            option = self.var_option.get()
+        if self.videos:
+            video = self.videos[self.show_idx]
+            if option == OptionList.CUSTOM:
+                pass
+            else:
+                rect_dim = video.get_crop(option=option)
+            if self.image_canvas_after:
+                self.canvas_video_after.itemconfig(
+                    self.image_canvas_after,
+                    image=video.get_image(crop=True))
+                self.canvas_video_after.coords(
+                    self.image_canvas_after,
+                    *self.dim_canvas.get_position())
+            else:
+                self.image_canvas_after = self.canvas_video_after.create_image(
+                    *self.dim_canvas.get_position(),
+                    image=video.get_image(crop=True))
 
     def event_spin_rect(self):
-        pass
+        if self.videos:
+            self.var_option.set(OptionList.CUSTOM)
+            video = self.videos[self.show_idx]
+            video.set_crop()
     '''
         posx_spin = int(self.spin_x.get())
         posy_spin = int(self.spin_y.get())
