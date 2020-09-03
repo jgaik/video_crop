@@ -33,9 +33,8 @@ class Dimensions:
     class Size:
 
         def __init__(self, width=0, height=0):
-            self.width = width
-            self.height = height
-            
+            self.width = int(width)
+            self.height = int(height)
 
         def __iter__(self):
             yield self.width
@@ -43,17 +42,16 @@ class Dimensions:
 
         def __repr__(self):
             dic = self.__dict__
-            keys = [k for k in dic.keys() if k[0] != "_"]
+            keys = [k for k in dic if k[0] != "_"]
             return json.dumps({
-                'class': self.__class__.__name__, 
+                'class': self.__class__.__name__,
                 'fields': dict([(k, dic[k]) for k in keys])}, indent=4)
-
 
     class Position:
 
         def __init__(self, x=0, y=0):
-            self.x = x
-            self.y = y
+            self.x = int(x)
+            self.y = int(y)
 
         def __iter__(self):
             yield self.x
@@ -61,9 +59,9 @@ class Dimensions:
 
         def __repr__(self):
             dic = self.__dict__
-            keys = [k for k in dic.keys() if k[0] != "_"]
+            keys = [k for k in dic if k[0] != "_"]
             return json.dumps({
-                'class': self.__class__.__name__, 
+                'class': self.__class__.__name__,
                 'fields': dict([(k, dic[k]) for k in keys])}, indent=4)
 
     def __init__(self, pos_x=0, pos_y=0, width=0, height=0):
@@ -100,10 +98,11 @@ class Dimensions:
 
     def __repr__(self):
         return json.dumps({
-            'class': self.__class__.__name__, 
+            'class': self.__class__.__name__,
             'fields': {
-                self.position.__class__.__name__: json.loads(str(self.position)), 
+                self.position.__class__.__name__: json.loads(str(self.position)),
                 self.size.__class__.__name__: json.loads(str(self.size))}}, indent=4)
+
 
 class VideoData:
 
@@ -180,7 +179,7 @@ class VideoData:
             if size:
                 self._size_border = size
             image_cropped = self._image.crop(self._dim_crop.get_bbox())
-            if ratio_cropped := self._check_ratio(*self._size_border):
+            if ratio_cropped := self._check_ratio(*self._dim_crop.get_size()):
                 if ratio_cropped > self._aspect:
                     width_output = self._size_border.width
                     height_output = int(width_output/ratio_cropped)
@@ -189,38 +188,39 @@ class VideoData:
                     width_output = int(height_output*ratio_cropped)
             else:
                 width_output, height_output = tuple(self._size_border)
-            self._image_tk_cropped =  ImageTk.PhotoImage(
+            self._image_tk_cropped = ImageTk.PhotoImage(
                 image_cropped.resize((width_output, height_output)))
             return self._image_tk_cropped
-        else:
-            if size:
-                if self._mode.get() == VideoData.Mode.FIT:
-                    self._dim_tk.set_size(size.width, size.height)
-                    self._dim_tk.set_position(0, 0)
-                if self._mode.get() == VideoData.Mode.WIDE:
-                    self._dim_tk.set_size(
-                        width=size.width,
-                        height=int(size.width/self._ratio))
-                    self._dim_tk.set_position(
-                        x=0,
-                        y=(size.height - self._dim_tk.size.height)/2)
-                if self._mode.get() == VideoData.Mode.TALL:
-                    self._dim_tk.set_size(
-                        height=size.height,
-                        width=int(size.height*self._ratio))
-                    self._dim_tk.set_position(
-                        x=(size.width - self._dim_tk.size.width)/2,
-                        y=0)
-                self._image_tk = ImageTk.PhotoImage(
-                    self._image.resize(self._dim_tk.get_size()))
-                self._size_border = size
-                self._aspect = size.width/size.height
-                self._resize_factor = self._dim_tk.size.width/self._width
-            return self._image_tk
+        if size:
+            if self._mode.get() == VideoData.Mode.FIT:
+                self._dim_tk.set_size(size.width, size.height)
+                self._dim_tk.set_position(0, 0)
+            if self._mode.get() == VideoData.Mode.WIDE:
+                self._dim_tk.set_size(
+                    width=size.width,
+                    height=int(size.width/self._ratio))
+                self._dim_tk.set_position(
+                    x=0,
+                    y=(size.height - self._dim_tk.size.height)/2)
+            if self._mode.get() == VideoData.Mode.TALL:
+                self._dim_tk.set_size(
+                    height=size.height,
+                    width=int(size.height*self._ratio))
+                self._dim_tk.set_position(
+                    x=(size.width - self._dim_tk.size.width)/2,
+                    y=0)
+            self._image_tk = ImageTk.PhotoImage(
+                self._image.resize(self._dim_tk.get_size()))
+            self._size_border = size
+            self._aspect = size.width/size.height
+            self._resize_factor = self._dim_tk.size.width/self._width
+        return self._image_tk
 
     def set_crop(self, option, crop_dim=None):
         if option == OptionList.CUSTOM:
-            self._dim_crop = crop_dim
+            self._option = option
+            if crop_dim:
+                self._dim_crop = crop_dim
         else:
             if self._mode.check(option):
                 dim = Dimensions()
@@ -287,7 +287,7 @@ class VideoData:
 
     def get_option(self):
         return self._option
-    
+
     def get_resize_factor(self):
         return self._resize_factor
 
@@ -325,6 +325,7 @@ class App:
         self.dim_canvas = Dimensions(width=320, height=0, pos_x=160, pos_y=0)
         self.image_canvas_after = None
         self.image_canvas_before = None
+        self.rect_croparea = None
 
         self.frame_control = ttk.Frame(self.master)
         self.frame_custom = ttk.LabelFrame(self.master, text='Custom crop')
@@ -389,13 +390,13 @@ class App:
         self.spin_y = ttk.Spinbox(
             self.tab_position, from_=0, command=self.event_spin_rect, width=4)
 
-        #frame main
+        # frame main
         self.frame_control.grid(row=0, column=0, sticky='nswe')
         self.frame_custom.grid(row=0, column=1, sticky='nswe')
         self.frame_preview.grid(row=1, column=0, columnspan=2)
         self.button_save_video.grid(row=2, column=0, columnspan=2)
 
-        #frame control
+        # frame control
         self.button_choose_video.grid(row=0, column=0)
         self.text_filepaths.grid(sticky='nwe')
         self.scroll_filepaths.grid(row=1, sticky='nwe')
@@ -403,13 +404,13 @@ class App:
         self.option_aspect.grid(row=1, column=0)
         self.option_crop.grid(row=2, column=0)
 
-        #frame preview
+        # frame preview
         self.canvas_video_before.grid(row=0, column=0, padx=10)
         self.canvas_video_after.grid(row=0, column=1, padx=10)
         label_video_before.grid(row=1, column=0, pady=5)
         label_video_after.grid(row=1, column=1, pady=5)
 
-        #frame custom
+        # frame custom
         self.notebook_custom.add(self.tab_size, text="Size")
         self.notebook_custom.add(self.tab_position, text="Position")
         self.notebook_custom.pack(fill=tk.BOTH)
@@ -421,7 +422,6 @@ class App:
         self.spin_x.grid(row=0, column=1)
         label_y.grid(row=1, column=0)
         self.spin_y.grid(row=1, column=1)
-
 
         self.prepare_canvas(aspect='16:9')
 
@@ -491,12 +491,8 @@ class App:
             self.var_option.set(option)
 
             rect_dim = self.set_spin(video.get_crop())
-            video_pos = video.get_position()
-            rect_bbox = self._rect2canvas(
-                rect_dim, 
-                video_pos, 
-                video.get_resize_factor()).get_bbox()
-            if self.image_canvas_after:
+            rect_bbox = self._rect2canvas(rect_dim).get_bbox()
+            if self.image_canvas_after and self.rect_croparea:
                 self.canvas_video_after.itemconfig(
                     self.image_canvas_after,
                     image=video.get_image(crop=True))
@@ -520,18 +516,21 @@ class App:
 
     def event_spin_rect(self):
         if self.videos:
+            v = self.videos[self.show_idx]
+            h = v.get_size().height
             dim_new = self.set_spin(
                 Dimensions(
-                    pos_x=self.spin_x.get(),
-                    pos_y=self.spin_y.get(),
-                    width=self.spin_width.get(),
-                    height=self.spin_height.get()))
-            self.var_option.set(OptionList.CUSTOM)
-            video = self.videos[self.show_idx]
-            video.set_crop(option=OptionList.CUSTOM, crop_dim=dim_new)
+                    pos_x=int(self.spin_x.get()),
+                    pos_y=h - int(self.spin_y.get()),
+                    width=int(self.spin_width.get()),
+                    height=int(self.spin_height.get())))
+            v.set_crop(
+                option=OptionList.CUSTOM, crop_dim=dim_new)
             self.update_canvas()
 
-    def _rect2canvas(self, rect_dim, video_pos, factor):
+    def _rect2canvas(self, rect_dim):
+        video_pos = self.videos[self.show_idx].get_position()
+        factor = self.videos[self.show_idx].get_resize_factor()
         pos_rect = rect_dim.get_position()
         return Dimensions(
             width=rect_dim.size.width*factor,
@@ -549,7 +548,7 @@ class App:
         self.spin_x.set(int(rect_dim.position.x))
         if (dy := rect_dim.position.y + rect_dim.size.height/2 - max_height) > 0:
             rect_dim.position.y -= dy
-        self.spin_y.set(int(rect_dim.position.y))
+        self.spin_y.set(max_height - int(rect_dim.position.y))
         self.spin_height.config({
             'to': max_height})
         self.spin_width.config({
@@ -562,6 +561,7 @@ class App:
             'to': max_height - rect_dim.size.height/2})
 
         return rect_dim
+
 
 if __name__ == "__main__":
     root = tk.Tk()
