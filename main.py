@@ -1,303 +1,11 @@
 # pylint: disable=attribute-defined-outside-init, C0114, C0115, C0116, invalid-name, unused-argument
+from structs import *
+from video import *
 import tkinter.filedialog as fdiag
 import tkinter as tk
 import tkinter.ttk as ttk
-import random
 from os import path, linesep
-import json
 import cv2
-from PIL import ImageTk, Image
-
-
-class OptionList:
-    CENTER = 'Center'
-    TOP = 'Top'
-    BOTTOM = 'Bottom'
-    LEFT = 'Left'
-    RIGHT = 'Right'
-    CUSTOM = 'Custom'
-
-    @classmethod
-    def get(cls):
-        attr = cls.__dict__
-        out = []
-        for a in attr:
-            if not callable(getattr(cls, a)):
-                if not a.startswith("__"):
-                    out.append(attr[a])
-        return out
-
-
-class Dimensions:
-
-    class Size:
-
-        def __init__(self, width=0, height=0):
-            self.width = int(width)
-            self.height = int(height)
-
-        def __iter__(self):
-            yield self.width
-            yield self.height
-
-        def __repr__(self):
-            dic = self.__dict__
-            keys = [k for k in dic if k[0] != "_"]
-            return json.dumps({
-                'class': self.__class__.__name__,
-                'fields': dict([(k, dic[k]) for k in keys])}, indent=4)
-
-    class Position:
-
-        def __init__(self, x=0, y=0):
-            self.x = int(x)
-            self.y = int(y)
-
-        def __iter__(self):
-            yield self.x
-            yield self.y
-
-        def __repr__(self):
-            dic = self.__dict__
-            keys = [k for k in dic if k[0] != "_"]
-            return json.dumps({
-                'class': self.__class__.__name__,
-                'fields': dict([(k, dic[k]) for k in keys])}, indent=4)
-
-    def __init__(self, pos_x=0, pos_y=0, width=0, height=0):
-        self.position = Dimensions.Position(pos_x, pos_y)
-        self.size = Dimensions.Size(width, height)
-
-    def set_size(self, width, height):
-        self.set_dimension(width=width, height=height)
-
-    def get_size(self):
-        return self.size
-
-    def set_position(self, x, y):
-        self.set_dimension(x=x, y=y)
-
-    def get_position(self):
-        return self.position
-
-    def get_bbox(self):
-        return (int(self.position.x - self.size.width/2),
-                int(self.position.y - self.size.height/2),
-                int(self.position.x + self.size.width/2),
-                int(self.position.y + self.size.height/2))
-
-    def set_dimension(self, width=None, height=None, x=None, y=None):
-        if not width is None:
-            self.size.width = width
-        if not height is None:
-            self.size.height = height
-        if not x is None:
-            self.position.x = x
-        if not y is None:
-            self.position.y = y
-
-    def __repr__(self):
-        return json.dumps({
-            'class': self.__class__.__name__,
-            'fields': {
-                self.position.__class__.__name__: json.loads(str(self.position)),
-                self.size.__class__.__name__: json.loads(str(self.size))}}, indent=4)
-
-
-class VideoData:
-
-    class Mode:
-        WIDE = 2
-        TALL = 1
-        FIT = 0
-
-        def __init__(self):
-            self._current = None
-
-        def set(self, mode):
-            self._current = mode
-            self._set_options()
-
-        def _set_options(self):
-            self._options = [OptionList.CENTER, OptionList.CUSTOM]
-            if self._current == self.WIDE:
-                self._options[1: 1] = [
-                    OptionList.LEFT, OptionList.RIGHT]
-            if self._current == self.TALL:
-                self._options[1: 1] = [
-                    OptionList.TOP, OptionList.BOTTOM]
-
-        def get_options(self):
-            if self._current is None:
-                return None
-            return self._options
-
-        def get(self):
-            return self._current
-
-        def check(self, option):
-            return option in self._options
-
-    def __init__(self, filepath):
-        self.filepath = filepath
-        self.filename, self._fileext = path.splitext(filepath)
-        self.filename = path.basename(self.filename)
-        self._dim_crop = Dimensions()
-        self._dim_tk = Dimensions()
-        self._video = cv2.VideoCapture(filepath)
-        self._mode = VideoData.Mode()
-        self._option = None
-        self._frames = None
-        self._resize_factor = 1
-
-    def is_ok(self):
-        return self._video.isOpened()
-
-    def extract_image(self, aspect, random_frame=True):
-        self._aspect = aspect
-        if not self._frames:
-            self._frames = int(self._video.get(cv2.CAP_PROP_FRAME_COUNT))
-            self._width = int(self._video.get(cv2.CAP_PROP_FRAME_WIDTH))
-            self._height = int(self._video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        if random_frame:
-            self._video.set(cv2.CAP_PROP_POS_FRAMES,
-                            random.randrange(self._frames))
-        status, frame = self._video.read()
-        if status:
-            self._image = Image.fromarray(frame)
-            self._ratio = self._check_ratio(self._width, self._height)
-            if not self._ratio:
-                self._mode.set(VideoData.Mode.FIT)
-            else:
-                if self._ratio > 1:
-                    self._mode.set(VideoData.Mode.WIDE)
-                else:
-                    self._mode.set(VideoData.Mode.TALL)
-
-    def get_image(self, size=None, crop=False):
-        if crop:
-            if size:
-                self._size_border = size
-            image_cropped = self._image.crop(self._dim_crop.get_bbox())
-            if ratio_cropped := self._check_ratio(*self._dim_crop.get_size()):
-                if ratio_cropped > self._aspect:
-                    width_output = self._size_border.width
-                    height_output = int(width_output/ratio_cropped)
-                else:
-                    height_output = self._size_border.height
-                    width_output = int(height_output*ratio_cropped)
-            else:
-                width_output, height_output = tuple(self._size_border)
-            self._image_tk_cropped = ImageTk.PhotoImage(
-                image_cropped.resize((width_output, height_output)))
-            return self._image_tk_cropped
-        if size:
-            if self._mode.get() == VideoData.Mode.FIT:
-                self._dim_tk.set_size(size.width, size.height)
-                self._dim_tk.set_position(0, 0)
-            if self._mode.get() == VideoData.Mode.WIDE:
-                self._dim_tk.set_size(
-                    width=size.width,
-                    height=int(size.width/self._ratio))
-                self._dim_tk.set_position(
-                    x=0,
-                    y=(size.height - self._dim_tk.size.height)/2)
-            if self._mode.get() == VideoData.Mode.TALL:
-                self._dim_tk.set_size(
-                    height=size.height,
-                    width=int(size.height*self._ratio))
-                self._dim_tk.set_position(
-                    x=(size.width - self._dim_tk.size.width)/2,
-                    y=0)
-            self._image_tk = ImageTk.PhotoImage(
-                self._image.resize(self._dim_tk.get_size()))
-            self._size_border = size
-            self._aspect = size.width/size.height
-            self._resize_factor = self._dim_tk.size.width/self._width
-        return self._image_tk
-
-    def set_crop(self, option, crop_dim=None):
-        if option == OptionList.CUSTOM:
-            self._option = option
-            if crop_dim:
-                self._dim_crop = crop_dim
-        else:
-            if self._mode.check(option):
-                dim = Dimensions()
-                self._option = option
-                if self._mode.get() == VideoData.Mode.FIT:
-                    if option == OptionList.CENTER:
-                        dim.set_dimension(
-                            width=self._width,
-                            height=self._height,
-                            x=self._width/2,
-                            y=self._height/2)
-                if self._mode.get() == VideoData.Mode.WIDE:
-                    if option == OptionList.CENTER:
-                        dim.set_dimension(
-                            height=self._height,
-                            width=self._height*self._aspect,
-                            x=self._width/2,
-                            y=self._height/2)
-                    if option == OptionList.LEFT:
-                        dim.set_size(
-                            height=self._height,
-                            width=self._height*self._aspect)
-                        dim.set_position(
-                            x=dim.size.width/2,
-                            y=self._height/2)
-                    if option == OptionList.RIGHT:
-                        dim.set_size(
-                            height=self._height,
-                            width=self._height*self._aspect)
-                        dim.set_position(
-                            x=self._width - dim.size.width/2,
-                            y=self._height/2)
-                if self._mode.get() == VideoData.Mode.TALL:
-                    if option == OptionList.CENTER:
-                        dim.set_dimension(
-                            width=self._width,
-                            height=self._width/self._aspect,
-                            x=self._width/2,
-                            y=self._height/2)
-                    if option == OptionList.BOTTOM:
-                        dim.set_size(
-                            width=self._width,
-                            height=self._width/self._aspect)
-                        dim.set_position(
-                            x=self._width/2,
-                            y=self._height - dim.size.height/2)
-                    if option == OptionList.TOP:
-                        dim.set_size(
-                            width=self._width,
-                            height=self._width/self._aspect)
-                        dim.set_position(
-                            x=self._width/2,
-                            y=dim.size.height/2)
-                self._dim_crop = dim
-
-    def get_crop(self):
-        return self._dim_crop
-
-    def get_position(self):
-        return self._dim_tk.get_position()
-
-    def get_size(self):
-        return Dimensions.Size(self._width, self._height)
-
-    def get_option(self):
-        return self._option
-
-    def get_resize_factor(self):
-        return self._resize_factor
-
-    def process(self):
-        self._video.release()
-
-    def _check_ratio(self, w, h):
-        if w/h/self._aspect == 1:
-            return False
-        return w/h
 
 
 class App:
@@ -377,14 +85,17 @@ class App:
         self.tab_size = ttk.Frame(self.notebook_custom)
         self.tab_position = ttk.Frame(self.notebook_custom)
 
+        self.var_check_aspect = tk.BooleanVar(value=True)
+        self.check_aspect = ttk.Checkbutton(self.tab_size, onvalue=True, offvalue=False, text='Keep aspect', command=self.event_check_aspect, variable=self.var_check_aspect)
+
         label_width = ttk.Label(self.tab_size, text='Width:')
         label_height = ttk.Label(self.tab_size, text='Height:')
         label_x = ttk.Label(self.tab_position, text='X:')
         label_y = ttk.Label(self.tab_position, text='Y:')
         self.spin_width = ttk.Spinbox(
-            self.tab_size, from_=0, command=self.event_spin_rect, width=4)
+            self.tab_size, from_=0, command=self.event_spin_width, width=4)
         self.spin_height = ttk.Spinbox(
-            self.tab_size, from_=0, command=self.event_spin_rect, width=4)
+            self.tab_size, from_=0, command=self.event_spin_height, width=4)
         self.spin_x = ttk.Spinbox(
             self.tab_position, from_=0, command=self.event_spin_rect, width=4)
         self.spin_y = ttk.Spinbox(
@@ -418,6 +129,7 @@ class App:
         self.spin_width.grid(row=0, column=1)
         label_height.grid(row=1, column=0)
         self.spin_height.grid(row=1, column=1)
+        self.check_aspect.grid(row=0,column=2,rowspan=2)
         label_x.grid(row=0, column=0)
         self.spin_x.grid(row=0, column=1)
         label_y.grid(row=1, column=0)
@@ -561,6 +273,31 @@ class App:
             'to': max_height - rect_dim.size.height/2})
 
         return rect_dim
+
+    def event_check_aspect(self):
+        pass
+
+    def event_spin_height(self):
+        if self.videos:
+            if self.var_check_aspect.get():
+                w = int(self.spin_width.get())
+                h = int(self.spin_height.get())
+                if h*self.aspect > self.videos[self.show_idx].get_size().width:
+                    self.spin_height.set(int(w/self.aspect))
+                else:
+                    self.spin_width.set(int(h*self.aspect))
+            self.event_spin_rect()
+
+    def event_spin_width(self):
+        if self.videos:
+            if self.var_check_aspect.get():
+                w = int(self.spin_width.get())
+                h = int(self.spin_height.get())
+                if w/self.aspect > self.videos[self.show_idx].get_size().height:
+                    self.spin_width.set(int(h*self.aspect))
+                else:
+                    self.spin_height.set(int(w/self.aspect))
+            self.event_spin_rect()
 
 
 if __name__ == "__main__":
