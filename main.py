@@ -48,7 +48,7 @@ class App:
         self.scroll_filepaths = ttk.Scrollbar(
             self.frame_text, orient=tk.HORIZONTAL)
         self.text_filepaths = tk.Text(
-            self.frame_text, height=1, width=30,
+            self.frame_text, height=1, width=50,
             xscrollcommand=self.scroll_filepaths.set, wrap=tk.NONE)
         self.button_choose_video = ttk.Button(
             self.frame_control, text="Choose video..", command=self.event_add_videos)
@@ -73,7 +73,7 @@ class App:
                 label=a, command=lambda x=a: self.prepare_canvas(aspect=x))
 
         self.button_save_video = ttk.Button(
-            self.master, text="Crop and Save video", command=self.event_save_videos)
+            self.master, text="Crop and Save videos", command=self.event_save_videos)
 
         self.var_option = tk.StringVar(value=OptionList.CENTER)
         self.option_crop = ttk.OptionMenu(self.frame_control, self.var_option)
@@ -85,8 +85,8 @@ class App:
         self.tab_size = ttk.Frame(self.notebook_custom)
         self.tab_position = ttk.Frame(self.notebook_custom)
 
-        self.var_check_aspect = tk.BooleanVar(value=True)
-        self.check_aspect = ttk.Checkbutton(self.tab_size, onvalue=True, offvalue=False, text='Keep aspect', command=self.event_check_aspect, variable=self.var_check_aspect)
+        self.var_check_aspect = tk.DoubleVar()
+        self.check_aspect = ttk.Checkbutton(self.tab_size, onvalue=1.0, offvalue=0.0, text='Lock aspect', command=self.event_check_aspect, variable=self.var_check_aspect)
 
         label_width = ttk.Label(self.tab_size, text='Width:')
         label_height = ttk.Label(self.tab_size, text='Height:')
@@ -94,20 +94,33 @@ class App:
         label_y = ttk.Label(self.tab_position, text='Y:')
         self.spin_width = ttk.Spinbox(
             self.tab_size, from_=0, command=self.event_spin_width, width=4)
+        self.spin_width.bind("<Up>", lambda _: return None)
+        self.spin_width.bind("<Down>", lambda _: return None)
         self.spin_height = ttk.Spinbox(
             self.tab_size, from_=0, command=self.event_spin_height, width=4)
+        self.spin_height.bind("<Up>", lambda _: return None)
+        self.spin_height.bind("<Down>", lambda _: return None)
         self.spin_x = ttk.Spinbox(
             self.tab_position, from_=0, command=self.event_spin_rect, width=4)
+        self.spin_x.bind("<Up>", lambda _: return None)
+        self.spin_x.bind("<Down>", lambda _: return None)
         self.spin_y = ttk.Spinbox(
             self.tab_position, from_=0, command=self.event_spin_rect, width=4)
+        self.spin_y.bind("<Up>", lambda _: return None)
+        self.spin_y.bind("<Down>", lambda _: return None)
+
+        self.master.bind("<Key>", self.event_key)
 
         # frame main
-        self.frame_control.grid(row=0, column=0, sticky='nswe')
-        self.frame_custom.grid(row=0, column=1, sticky='nswe')
-        self.frame_preview.grid(row=1, column=0, columnspan=2)
-        self.button_save_video.grid(row=2, column=0, columnspan=2)
+        self.master.columnconfigure(0, weight=1)
+        self.master.rowconfigure(1, weight=1)
+        self.frame_control.grid(row=0, column=0, sticky='nwse')
+        self.frame_custom.grid(row=0, column=1, sticky='nse')
+        self.frame_preview.grid(row=1, column=0, columnspan=2, sticky='nswe')
+        self.button_save_video.grid(row=2, column=0, columnspan=2, sticky='we')
 
         # frame control
+        self.frame_control.columnconfigure(1, weight=1)
         self.button_choose_video.grid(row=0, column=0)
         self.text_filepaths.grid(sticky='nwe')
         self.scroll_filepaths.grid(row=1, sticky='nwe')
@@ -116,10 +129,10 @@ class App:
         self.option_crop.grid(row=2, column=0)
 
         # frame preview
-        self.canvas_video_before.grid(row=0, column=0, padx=10)
-        self.canvas_video_after.grid(row=0, column=1, padx=10)
-        label_video_before.grid(row=1, column=0, pady=5)
-        label_video_after.grid(row=1, column=1, pady=5)
+        self.canvas_video_before.grid(row=0, column=0, padx=10, sticky='wens')
+        self.canvas_video_after.grid(row=0, column=1, padx=10, sticky='nswe')
+        label_video_before.grid(row=1, column=0, pady=5, sticky='n')
+        label_video_after.grid(row=1, column=1, pady=5, sticky='n')
 
         # frame custom
         self.notebook_custom.add(self.tab_size, text="Size")
@@ -135,7 +148,33 @@ class App:
         label_y.grid(row=1, column=0)
         self.spin_y.grid(row=1, column=1)
 
+        self.frame_custom.grid_remove()
+
         self.prepare_canvas(aspect='16:9')
+
+    def event_key(self, event):
+        if self.videos:
+            key = event.keysym
+            if key=='Left':
+                if self.notebook_custom.index('current') == 0:
+                    self.spin_width.event_generate("<<Decrement>>")
+                else:
+                    self.spin_x.event_generate("<<Decrement>>")
+            if key=='Right':
+                if self.notebook_custom.index('current') == 0:
+                    self.spin_width.event_generate("<<Increment>>")
+                else:
+                    self.spin_x.event_generate("<<Increment>>")
+            if key=='Down':
+                if self.notebook_custom.index('current') == 0:
+                    self.spin_height.event_generate("<<Decrement>>")
+                else:
+                    self.spin_y.event_generate("<<Decrement>>")
+            if key=='Up':
+                if self.notebook_custom.index('current') == 0:
+                    self.spin_height.event_generate("<<Increment>>")
+                else:
+                    self.spin_y.event_generate("<<Increment>>")
 
     def event_add_videos(self):
         filepaths = fdiag.askopenfilenames(
@@ -157,6 +196,7 @@ class App:
             self.text_filepaths.config(height=len(self.videos))
             self.frame_preview.config(labelwidget=self.option_video)
             self.prepare_canvas(idx=len(self.videos)-1)
+            self.frame_custom.grid()
 
     def event_save_videos(self):
         if self.videos:
@@ -173,6 +213,8 @@ class App:
         if aspect:
             self.var_aspect.set(aspect)
             self.aspect = self.aspects[aspect]
+            self.check_aspect.config(onvalue=self.aspect)
+            self.var_check_aspect.set(self.aspect)
             self.dim_canvas.set_dimension(
                 height=int(self.dim_canvas.size.width/self.aspect))
             self.dim_canvas.set_dimension(y=self.dim_canvas.size.height/2)
@@ -248,8 +290,7 @@ class App:
             width=rect_dim.size.width*factor,
             height=rect_dim.size.height*factor,
             pos_x=pos_rect.x * factor + video_pos.x,
-            pos_y=pos_rect.y * factor + video_pos.y
-        )
+            pos_y=pos_rect.y * factor + video_pos.y)
 
     def set_spin(self, rect_dim):
         max_width, max_height = self.videos[self.show_idx].get_size()
@@ -275,28 +316,31 @@ class App:
         return rect_dim
 
     def event_check_aspect(self):
-        pass
+        if self.var_check_aspect.get():
+            asp = int(self.spin_width.get())/int(self.spin_height.get())
+            self.check_aspect.config(onvalue=asp)
+            self.var_check_aspect.set(asp)
 
     def event_spin_height(self):
         if self.videos:
-            if self.var_check_aspect.get():
+            if asp:=self.var_check_aspect.get():
                 w = int(self.spin_width.get())
                 h = int(self.spin_height.get())
-                if h*self.aspect > self.videos[self.show_idx].get_size().width:
-                    self.spin_height.set(int(w/self.aspect))
+                if h*asp > self.videos[self.show_idx].get_size().width:
+                    self.spin_height.set(int(w/asp))
                 else:
-                    self.spin_width.set(int(h*self.aspect))
+                    self.spin_width.set(int(h*asp))
             self.event_spin_rect()
 
     def event_spin_width(self):
         if self.videos:
-            if self.var_check_aspect.get():
+            if asp:=self.var_check_aspect.get():
                 w = int(self.spin_width.get())
                 h = int(self.spin_height.get())
-                if w/self.aspect > self.videos[self.show_idx].get_size().height:
-                    self.spin_width.set(int(h*self.aspect))
+                if w/asp > self.videos[self.show_idx].get_size().height:
+                    self.spin_width.set(int(h*asp))
                 else:
-                    self.spin_height.set(int(w/self.aspect))
+                    self.spin_height.set(int(w/asp))
             self.event_spin_rect()
 
 
