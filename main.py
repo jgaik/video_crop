@@ -5,7 +5,6 @@ import tkinter.filedialog as fdiag
 import tkinter as tk
 import tkinter.ttk as ttk
 from os import path, linesep
-import cv2
 
 
 class App:
@@ -64,6 +63,7 @@ class App:
             width=self.dim_canvas.size.width, height=self.dim_canvas.size.height,
             relief=tk.SUNKEN)
         label_video_after = ttk.Label(self.frame_preview, text='After')
+        self.canvas_video_before.bind("<Configure>", self.event_configure)
 
         self.var_aspect = tk.StringVar()
         self.option_aspect = ttk.OptionMenu(
@@ -93,46 +93,47 @@ class App:
         label_x = ttk.Label(self.tab_position, text='X:')
         label_y = ttk.Label(self.tab_position, text='Y:')
         self.spin_width = ttk.Spinbox(
-            self.tab_size, from_=0, command=self.event_spin_width, width=4)
-        self.spin_width.bind("<Up>", lambda _: return None)
-        self.spin_width.bind("<Down>", lambda _: return None)
+            self.tab_size, from_=0, to=0, command=self.event_spin_width, width=4)
+        self.spin_width.bind("<Up>", lambda _: None)
+        self.spin_width.bind("<Down>", lambda _: None)
         self.spin_height = ttk.Spinbox(
-            self.tab_size, from_=0, command=self.event_spin_height, width=4)
-        self.spin_height.bind("<Up>", lambda _: return None)
-        self.spin_height.bind("<Down>", lambda _: return None)
+            self.tab_size, from_=0, to=0, command=self.event_spin_height, width=4)
+        self.spin_height.bind("<Up>", lambda _: None)
+        self.spin_height.bind("<Down>", lambda _: None)
         self.spin_x = ttk.Spinbox(
-            self.tab_position, from_=0, command=self.event_spin_rect, width=4)
-        self.spin_x.bind("<Up>", lambda _: return None)
-        self.spin_x.bind("<Down>", lambda _: return None)
+            self.tab_position, from_=0, to=0, command=self.event_spin_rect, width=4)
+        self.spin_x.bind("<Up>", lambda _: None)
+        self.spin_x.bind("<Down>", lambda _: None)
         self.spin_y = ttk.Spinbox(
-            self.tab_position, from_=0, command=self.event_spin_rect, width=4)
-        self.spin_y.bind("<Up>", lambda _: return None)
-        self.spin_y.bind("<Down>", lambda _: return None)
-
-        self.master.bind("<Key>", self.event_key)
+            self.tab_position, from_=0, to=0, command=self.event_spin_rect, width=4)
+        self.spin_y.bind("<Up>", lambda _: None)
+        self.spin_y.bind("<Down>", lambda _: None)
 
         # frame main
         self.master.columnconfigure(0, weight=1)
         self.master.rowconfigure(1, weight=1)
-        self.frame_control.grid(row=0, column=0, sticky='nwse')
-        self.frame_custom.grid(row=0, column=1, sticky='nse')
-        self.frame_preview.grid(row=1, column=0, columnspan=2, sticky='nswe')
-        self.button_save_video.grid(row=2, column=0, columnspan=2, sticky='we')
+        self.master.rowconfigure(2, weight=1)
+        self.frame_control.grid(row=0, column=0, sticky='nwse', padx=10, pady=5)
+        self.frame_custom.grid(row=0, column=1, sticky='nse',padx=10, pady=5)
+        self.frame_preview.grid(row=1, column=0, columnspan=2, sticky='nswe', padx=10, pady=5)
+        self.button_save_video.grid(row=2, column=0, columnspan=2, sticky='swe')
 
         # frame control
         self.frame_control.columnconfigure(1, weight=1)
-        self.button_choose_video.grid(row=0, column=0)
-        self.text_filepaths.grid(sticky='nwe')
-        self.scroll_filepaths.grid(row=1, sticky='nwe')
+        self.button_choose_video.grid(row=0, column=0, sticky='we')
+        self.text_filepaths.grid(sticky='nwe', padx=3)
+        self.scroll_filepaths.grid(row=1, sticky='nwe', padx=3)
         self.frame_text.grid(row=0, column=1, rowspan=3, sticky='ns')
-        self.option_aspect.grid(row=1, column=0)
-        self.option_crop.grid(row=2, column=0)
+        self.option_aspect.grid(row=1, column=0, sticky='we', pady=5)
+        self.option_crop.grid(row=2, column=0, sticky='we')
 
-        # frame preview
+        # frame Preview
+        self.frame_preview.columnconfigure(0, weight=1)
+        self.frame_preview.columnconfigure(1, weight=1)
         self.canvas_video_before.grid(row=0, column=0, padx=10, sticky='wens')
         self.canvas_video_after.grid(row=0, column=1, padx=10, sticky='nswe')
-        label_video_before.grid(row=1, column=0, pady=5, sticky='n')
-        label_video_after.grid(row=1, column=1, pady=5, sticky='n')
+        label_video_before.grid(row=1, column=0, pady=5, sticky='ns')
+        label_video_after.grid(row=1, column=1, pady=5, sticky='ns')
 
         # frame custom
         self.notebook_custom.add(self.tab_size, text="Size")
@@ -148,9 +149,34 @@ class App:
         label_y.grid(row=1, column=0)
         self.spin_y.grid(row=1, column=1)
 
-        self.frame_custom.grid_remove()
-
         self.prepare_canvas(aspect='16:9')
+
+        #window
+        self.master.bind("<Key>", self.event_key)
+        self.master.title("Video cropper")
+        self.master.update()
+        w_max = self.master.winfo_screenwidth()
+        w_opt = self.master.winfo_width()
+        h_max = self.master.winfo_screenheight()
+        h_opt = self.master.winfo_height()
+        w_min = min(w_max, w_opt)
+        h_min = min(h_max, h_opt)
+
+        pos_x = int((w_max - w_min)/2)
+        pos_y = int((h_max - h_min)/5)
+        self.master.geometry(f"{w_min}x{h_min}+{pos_x}+{pos_y}")
+        self.master.minsize(w_min, h_min)
+    
+    def event_configure(self, event):
+        self.dim_canvas.set_dimension(
+            width=event.width,
+            height=int(event.width/self.aspect))
+        self.dim_canvas.set_dimension(
+            x=self.dim_canvas.size.width/2,
+            y=self.dim_canvas.size.height/2)
+        self.canvas_video_before.config(height=self.dim_canvas.size.height)
+        self.canvas_video_after.config(height=self.dim_canvas.size.height)
+        self.prepare_canvas()
 
     def event_key(self, event):
         if self.videos:
@@ -196,8 +222,8 @@ class App:
             self.text_filepaths.config(height=len(self.videos))
             self.frame_preview.config(labelwidget=self.option_video)
             self.prepare_canvas(idx=len(self.videos)-1)
-            self.frame_custom.grid()
-
+            
+            
     def event_save_videos(self):
         if self.videos:
             directory = fdiag.askdirectory(
