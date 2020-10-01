@@ -111,15 +111,16 @@ class App:
 
         # frame main
         self.master.columnconfigure(0, weight=1)
-        self.master.rowconfigure(1, weight=1)
-        self.master.rowconfigure(2, weight=1)
+        self.master.rowconfigure(0, weight=1)
         self.frame_control.grid(row=0, column=0, sticky='nwse', padx=10, pady=5)
         self.frame_custom.grid(row=0, column=1, sticky='nse',padx=10, pady=5)
         self.frame_preview.grid(row=1, column=0, columnspan=2, sticky='nswe', padx=10, pady=5)
-        self.button_save_video.grid(row=2, column=0, columnspan=2, sticky='swe')
+        self.button_save_video.grid(row=2, column=0, columnspan=2, sticky='swe', padx=10, pady=5)
 
         # frame control
         self.frame_control.columnconfigure(1, weight=1)
+        self.frame_control.rowconfigure(1, weight=1)
+        self.frame_control.rowconfigure(2, weight=1)
         self.button_choose_video.grid(row=0, column=0, sticky='we')
         self.text_filepaths.grid(sticky='nwe', padx=3)
         self.scroll_filepaths.grid(row=1, sticky='nwe', padx=3)
@@ -127,7 +128,7 @@ class App:
         self.option_aspect.grid(row=1, column=0, sticky='we', pady=5)
         self.option_crop.grid(row=2, column=0, sticky='we')
 
-        # frame Preview
+        # frame preview
         self.frame_preview.columnconfigure(0, weight=1)
         self.frame_preview.columnconfigure(1, weight=1)
         self.canvas_video_before.grid(row=0, column=0, padx=10, sticky='wens')
